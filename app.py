@@ -14,7 +14,7 @@ DAFTAR_FILE = {
 }
 
 st.set_page_config(page_title="Monitoring Produksi", layout="wide")
-st.title("🏭 Monitoring Produksi Live")
+st.title("🏭 Monitoring Produksi BE")
 st.caption("Created & Developer : Mahesya | 2026 🚦") 
 
 # ==========================================
@@ -311,3 +311,4 @@ try:
 
 except Exception as e:
     st.error(f"Error: {str(e)}")
+
