@@ -15,7 +15,7 @@ DAFTAR_FILE = {
 
 st.set_page_config(page_title="Monitoring Produksi", layout="wide")
 st.title("🏭 Monitoring Produksi Live")
-st.caption("Created & Developer : Mahesya | 2026 | QC System Active 🚦") 
+st.caption("Created & Developer : Mahesya | 2026 🚦") 
 
 # ==========================================
 # 1. MENU SAMPING
@@ -284,3 +284,4 @@ try:
 
 except Exception as e:
     st.error(f"Error: {str(e)}")
+
