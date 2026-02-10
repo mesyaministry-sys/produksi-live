@@ -19,8 +19,8 @@ daftar_tanggal = [str(i) for i in range(1, 32)]
 
 with st.sidebar:
     st.header("📅 Pilih Periode")
-    # Default saya ubah ke index 0 (Tanggal 1) untuk mengetes fitur keamanan
-    pilihan_sheet = st.selectbox("Pilih Tanggal (Sheet):", daftar_tanggal, index=0) 
+    # Default pilih tanggal 10
+    pilihan_sheet = st.selectbox("Pilih Tanggal (Sheet):", daftar_tanggal, index=9) 
     
     if st.button("🔄 Refresh Data"):
         st.cache_data.clear()
@@ -31,45 +31,47 @@ with st.sidebar:
 url = f'https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={pilihan_sheet}'
 
 try:
-    # A. BACA DATA RAW (MODE SUPER TEXT)
+    # A. BACA DATA RAW
     df_raw = pd.read_csv(url, header=None, dtype=str, keep_default_na=False)
 
     # ==========================================
-    # 🚨 SECURITY CHECK: VALIDASI TANGGAL 🚨
+    # 🚨 VALIDASI TANGGAL (ANTI-DATA NYASAR) 🚨
     # ==========================================
-    # Kita cek Cell A2 (Baris 1, Kolom 0) atau sekitarnya dimana tanggal ditulis.
-    # Format di Excel biasanya: "Date : 6-Jan"
+    # Kita cari angka tanggal di baris-baris awal Excel
+    # Jika User pilih "1", tapi Excel bilang "6", berarti Sheet 1 Kosong.
     
-    valid_data = False
-    tanggal_excel = "-"
+    tanggal_cocok = False
+    tanggal_di_excel = "?"
     
     try:
-        # Ambil teks di pojok kiri atas (biasanya baris ke-2 atau ke-3)
-        header_area = df_raw.iloc[0:4, 0].astype(str).values.flatten()
-        for h in header_area:
-            if "date" in h.lower() or "tanggal" in h.lower() or "-" in h:
-                tanggal_excel = h
-                # Cek apakah angka tanggal yang dipilih user ada di teks tersebut?
-                # Contoh: User pilih "6". Excel "6-Jan". -> COCOK.
-                # Contoh: User pilih "1". Excel "6-Jan". -> TIDAK COCOK.
-                
-                # Regex mencari angka tanggal di excel (misal '6' dari '6-Jan')
-                match = re.search(r'\b' + re.escape(pilihan_sheet) + r'\b', h)
-                if match:
-                    valid_data = True
+        # Scan 5 baris pertama, Kolom A (Index 0)
+        # Cari cell yang mengandung "Date"
+        for i in range(5):
+            val = str(df_raw.iloc[i, 0]).lower()
+            if "date" in val or "tanggal" in val:
+                # Ambil semua angka di cell itu (Misal: "Date: 6-Jan" -> ['6'])
+                angka_ditemukan = re.findall(r'\d+', val)
+                if angka_ditemukan:
+                    tanggal_di_excel = angka_ditemukan[0] # Ambil angka pertama
+                    
+                    # Bandingkan dengan pilihan user
+                    # Pakai int agar "01" sama dengan "1"
+                    if int(tanggal_di_excel) == int(pilihan_sheet):
+                        tanggal_cocok = True
                     break
     except:
         pass
 
-    # JIKA TANGGAL TIDAK COCOK / SHEET TIDAK ADA -> STOP PROGRAM
-    if not valid_data:
-        st.error(f"⚠️ **DATA KOSONG / SHEET TIDAK DITEMUKAN**")
-        st.warning(f"Anda memilih Tanggal **{pilihan_sheet}**, tetapi sistem membaca file ini adalah data Tanggal: **{tanggal_excel}**.")
-        st.info("Kemungkinan Sheet untuk tanggal yang Anda pilih belum dibuat di Excel. Google secara otomatis mengirimkan sheet default.")
-        st.stop() # BERHENTI DISINI, JANGAN TAMPILKAN DATA NGAWUR
+    # KEPUTUSAN HAKIM:
+    # Jika tanggal di excel ketemu TAPI beda dengan pilihan user -> BLOKIR
+    if tanggal_di_excel != "?" and not tanggal_cocok:
+        st.warning(f"⛔ **TIDAK ADA KEGIATAN PRODUKSI**")
+        st.info(f"Anda memilih Tanggal **{pilihan_sheet}**, tetapi data yang terbaca adalah Tanggal **{tanggal_di_excel}**.")
+        st.caption("Penjelasan: Sheet untuk tanggal ini belum dibuat di Excel, sehingga Google mengirimkan sheet lain secara acak.")
+        st.stop() # BERHENTI DISINI
 
     # ==========================================
-    # B. SMART SEARCH (LOGIKA ANTI-HEADER) 🏆
+    # B. SMART SEARCH (ANTI-JUAN & ANTI-MAX) 🏆
     # ==========================================
     produk_a = "-"
     produk_b = "-"
@@ -84,16 +86,13 @@ try:
             idx_center = matches[0]
             idx_start = idx_center 
             
-            # DAFTAR BLACKLIST DIPERKETAT
-            # Tambahkan "max", "min" agar "15 max" tidak terambil
+            # BLACKLIST: Tambah nama checker yang sering muncul
             blacklist = ["nan", "none", "-", "", "moisture", "particle", "mesh", "null", 
                          "time", "tonnage", "paraph", "checker", "ok", "no", "shift", 
-                         "max", "min", "avg", "phadla", "reza", "qc", "admin", "spv", "juan"]
+                         "max", "min", "avg", "phadla", "reza", "qc", "admin", "juan", "dian"]
             
-            # FUNGSI PEMILIH CERDAS
             def get_best_candidate(row_indices, col_start, col_end):
                 candidates = []
-                
                 for r in row_indices:
                     if r < 0 or r >= len(df_raw): continue
                     vals = df_raw.iloc[r, col_start:col_end].values.flatten()
@@ -101,50 +100,44 @@ try:
                         v_clean = str(v).strip()
                         v_lower = v_clean.lower()
                         
-                        # Filter Panjang & Blacklist
+                        # Filter Dasar
                         if len(v_clean) > 1:
                             is_blacklist = False
-                            for bad_word in blacklist:
-                                if bad_word in v_lower:
-                                    is_blacklist = True
-                                    break
+                            for bad in blacklist:
+                                if bad in v_lower:
+                                    is_blacklist = True; break
                             
                             if not is_blacklist:
-                                # Harus ada huruf (menghindari angka murni)
-                                if re.search('[a-zA-Z]', v_clean):
-                                    candidates.append(v_clean)
+                                # SYARAT BARU: Tolak jika Huruf Kecil/Title Case (Nama Orang)
+                                # Kecuali ada angkanya (Z 125)
+                                has_digit = bool(re.search(r'\d', v_clean))
+                                is_upper = v_clean.isupper() # PRODUCT HOLD (True), Juan (False)
+                                
+                                # Lolos jika: Ada Angkanya ATAU Huruf Besar Semua
+                                if has_digit or is_upper:
+                                    if re.search('[a-zA-Z]', v_clean): # Harus ada huruf
+                                        candidates.append(v_clean)
                 
-                if not candidates:
-                    return "-"
+                if not candidates: return "-"
                 
-                # --- PRIORITAS SELEKSI ---
-                
-                # 1. Prioritas TERTINGGI: Mengandung ANGKA + HURUF (Cth: Z 125, Z 211)
-                # "15 max" sudah kena blacklist, jadi aman.
+                # PRIORITAS 1: Ada Angkanya (Z 125, Z 211)
                 for c in candidates:
-                    if re.search(r'\d', c) and re.search(r'[a-zA-Z]', c): 
-                        return c
+                    if re.search(r'\d', c): return c
                 
-                # 2. Prioritas KEDUA: Huruf Besar Semua (Cth: PRODUCT HOLD BLEND)
-                # Nama orang biasanya "Juan", "Phadla" (Huruf besar kecil)
+                # PRIORITAS 2: Ada kata PRODUCT/HOLD/BLEND
                 for c in candidates:
-                    if c.isupper() and len(c) > 3:
-                        return c
-
-                # 3. Prioritas KETIGA: Kata Kunci Khusus
-                for c in candidates:
-                    if "PRODUCT" in c.upper() or "HOLD" in c.upper() or "SMBE" in c.upper():
+                    if any(x in c.upper() for x in ["PRODUCT", "HOLD", "BLEND", "SMBE"]):
                         return c
 
                 return candidates[0]
 
             rows_to_scan = [idx_center, idx_center-1, idx_center+1]
             
-            # SCAN LINE A
+            # SCAN LINE A (Kolom 6 s/d 11)
             res_a = get_best_candidate(rows_to_scan, 6, 11)
             if res_a != "-": produk_a = res_a
 
-            # SCAN LINE B
+            # SCAN LINE B (Kolom 11 s/d 18)
             res_b = get_best_candidate(rows_to_scan, 11, 18)
             if res_b != "-": produk_b = res_b
             
