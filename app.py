@@ -19,7 +19,8 @@ daftar_tanggal = [str(i) for i in range(1, 32)]
 
 with st.sidebar:
     st.header("📅 Pilih Periode")
-    pilihan_sheet = st.selectbox("Pilih Tanggal (Sheet):", daftar_tanggal, index=9) 
+    # Default saya ubah ke index 0 (Tanggal 1) untuk mengetes fitur keamanan
+    pilihan_sheet = st.selectbox("Pilih Tanggal (Sheet):", daftar_tanggal, index=0) 
     
     if st.button("🔄 Refresh Data"):
         st.cache_data.clear()
@@ -34,7 +35,41 @@ try:
     df_raw = pd.read_csv(url, header=None, dtype=str, keep_default_na=False)
 
     # ==========================================
-    # B. SMART SEARCH (LOGIKA PRIORITAS) 🏆
+    # 🚨 SECURITY CHECK: VALIDASI TANGGAL 🚨
+    # ==========================================
+    # Kita cek Cell A2 (Baris 1, Kolom 0) atau sekitarnya dimana tanggal ditulis.
+    # Format di Excel biasanya: "Date : 6-Jan"
+    
+    valid_data = False
+    tanggal_excel = "-"
+    
+    try:
+        # Ambil teks di pojok kiri atas (biasanya baris ke-2 atau ke-3)
+        header_area = df_raw.iloc[0:4, 0].astype(str).values.flatten()
+        for h in header_area:
+            if "date" in h.lower() or "tanggal" in h.lower() or "-" in h:
+                tanggal_excel = h
+                # Cek apakah angka tanggal yang dipilih user ada di teks tersebut?
+                # Contoh: User pilih "6". Excel "6-Jan". -> COCOK.
+                # Contoh: User pilih "1". Excel "6-Jan". -> TIDAK COCOK.
+                
+                # Regex mencari angka tanggal di excel (misal '6' dari '6-Jan')
+                match = re.search(r'\b' + re.escape(pilihan_sheet) + r'\b', h)
+                if match:
+                    valid_data = True
+                    break
+    except:
+        pass
+
+    # JIKA TANGGAL TIDAK COCOK / SHEET TIDAK ADA -> STOP PROGRAM
+    if not valid_data:
+        st.error(f"⚠️ **DATA KOSONG / SHEET TIDAK DITEMUKAN**")
+        st.warning(f"Anda memilih Tanggal **{pilihan_sheet}**, tetapi sistem membaca file ini adalah data Tanggal: **{tanggal_excel}**.")
+        st.info("Kemungkinan Sheet untuk tanggal yang Anda pilih belum dibuat di Excel. Google secara otomatis mengirimkan sheet default.")
+        st.stop() # BERHENTI DISINI, JANGAN TAMPILKAN DATA NGAWUR
+
+    # ==========================================
+    # B. SMART SEARCH (LOGIKA ANTI-HEADER) 🏆
     # ==========================================
     produk_a = "-"
     produk_b = "-"
@@ -49,55 +84,67 @@ try:
             idx_center = matches[0]
             idx_start = idx_center 
             
-            # DAFTAR BLACKLIST (PERLUAS DENGAN NAMA ORANG)
+            # DAFTAR BLACKLIST DIPERKETAT
+            # Tambahkan "max", "min" agar "15 max" tidak terambil
             blacklist = ["nan", "none", "-", "", "moisture", "particle", "mesh", "null", 
                          "time", "tonnage", "paraph", "checker", "ok", "no", "shift", 
-                         "max", "min", "avg", "phadla", "reza", "qc", "admin", "spv", "leader"]
+                         "max", "min", "avg", "phadla", "reza", "qc", "admin", "spv", "juan"]
             
             # FUNGSI PEMILIH CERDAS
             def get_best_candidate(row_indices, col_start, col_end):
                 candidates = []
                 
-                # 1. KUMPULKAN SEMUA TEKS KANDIDAT
                 for r in row_indices:
                     if r < 0 or r >= len(df_raw): continue
                     vals = df_raw.iloc[r, col_start:col_end].values.flatten()
                     for v in vals:
                         v_clean = str(v).strip()
-                        # Hanya ambil teks yang cukup panjang dan bukan blacklist
-                        if len(v_clean) > 1 and v_clean.lower() not in blacklist:
-                            # Harus ada huruf (menghindari angka murni seperti 11.36)
-                            if re.search('[a-zA-Z]', v_clean):
-                                candidates.append(v_clean)
+                        v_lower = v_clean.lower()
+                        
+                        # Filter Panjang & Blacklist
+                        if len(v_clean) > 1:
+                            is_blacklist = False
+                            for bad_word in blacklist:
+                                if bad_word in v_lower:
+                                    is_blacklist = True
+                                    break
+                            
+                            if not is_blacklist:
+                                # Harus ada huruf (menghindari angka murni)
+                                if re.search('[a-zA-Z]', v_clean):
+                                    candidates.append(v_clean)
                 
                 if not candidates:
                     return "-"
                 
-                # 2. SELEKSI JUARA (PRIORITAS)
+                # --- PRIORITAS SELEKSI ---
                 
-                # Juara 1: Mengandung ANGKA (Contoh: "Z 125", "211")
-                # Ini membedakan Produk vs Nama Orang (Phadla gak ada angkanya)
+                # 1. Prioritas TERTINGGI: Mengandung ANGKA + HURUF (Cth: Z 125, Z 211)
+                # "15 max" sudah kena blacklist, jadi aman.
                 for c in candidates:
-                    if re.search(r'\d', c): 
+                    if re.search(r'\d', c) and re.search(r'[a-zA-Z]', c): 
                         return c
                 
-                # Juara 2: Mengandung kata "PRODUCT" atau "HOLD"
+                # 2. Prioritas KEDUA: Huruf Besar Semua (Cth: PRODUCT HOLD BLEND)
+                # Nama orang biasanya "Juan", "Phadla" (Huruf besar kecil)
                 for c in candidates:
-                    if "PRODUCT" in c.upper() or "HOLD" in c.upper():
+                    if c.isupper() and len(c) > 3:
                         return c
 
-                # Juara 3: Ambil kandidat pertama yang tersisa
+                # 3. Prioritas KETIGA: Kata Kunci Khusus
+                for c in candidates:
+                    if "PRODUCT" in c.upper() or "HOLD" in c.upper() or "SMBE" in c.upper():
+                        return c
+
                 return candidates[0]
 
-            # AREA JARINGAN (Cek baris Pusat, Atas, Bawah)
             rows_to_scan = [idx_center, idx_center-1, idx_center+1]
             
-            # SCAN LINE A (Perlebar ke kanan sampai kol 11 untuk jaga-jaga)
-            # Logika Prioritas akan membuang "PHADLA" karena tidak ada angkanya
+            # SCAN LINE A
             res_a = get_best_candidate(rows_to_scan, 6, 11)
             if res_a != "-": produk_a = res_a
 
-            # SCAN LINE B (Kolom 11 s/d 18)
+            # SCAN LINE B
             res_b = get_best_candidate(rows_to_scan, 11, 18)
             if res_b != "-": produk_b = res_b
             
@@ -108,7 +155,6 @@ try:
     # C. OLAH DATA TABEL
     # ==========================================
     
-    # Ambil data mulai dari baris jam 9:00
     df = df_raw.iloc[idx_start:].copy() 
 
     nama_kolom = [
