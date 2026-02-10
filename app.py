@@ -47,110 +47,114 @@ try:
     df_raw = pd.read_csv(url, header=None, dtype=str, keep_default_na=False)
 
     # ==========================================
-    # B. SMART SEARCH (PERBAIKAN: INDEX I & N + ANTI-RANGE)
+    # B. SMART SEARCH (VERSI FINAL INDEX 8 & 13)
     # ==========================================
     produk_a = "-"
     produk_b = "-"
     idx_start = 6 
 
     try:
-        # Cari baris "9:00"
+        # 1. Cari Posisi Baris Jam 9:00
         scan_area = df_raw.iloc[:25, 0].astype(str)
         matches = scan_area[scan_area.str.contains(r"9[:\.]00", regex=True)].index
         
         if not matches.empty:
             idx_start = matches[0] # Ini Baris 9 (Jam 9:00)
             
-            # --- FUNGSI VALIDASI KHUSUS ---
-            def cek_valid(val):
-                t = str(val).strip()
-                # Tolak jika kosong atau kependekan
-                if len(t) < 2: return False
-                # Tolak Angka Murni (misal: "80,01")
-                if t.replace('.', '').replace(',', '').isdigit(): return False
-                # Tolak Range Angka (misal: "1-5", "1-14") <- INI YANG PENTING
-                if re.match(r'^\d+-\d+$', t): return False
-                # Tolak Header
-                blacklist = ["moisture", "particle", "mesh", "max", "min", "checker", "paraph"]
-                if any(x in t.lower() for x in blacklist): return False
-                return True
-
-            # --- CARI PRODUK A (KIRI) ---
-            # Sesuai Info: KOLOM I (Index 8)
-            # Kita cek di baris jam 9:00, kalau gak ada cek 1 baris di atasnya
+            # Target Baris Produk: SATU BARIS DI ATAS Jam 9:00
+            idx_produk = idx_start - 1
             
-            # Cek Baris 9, Kolom I (Index 8)
-            val_a = df_raw.iloc[idx_start, 8] 
-            if cek_valid(val_a):
-                produk_a = str(val_a).strip()
-            else:
-                # Cek Baris 8 (Atasnya), Kolom I
-                val_a_prev = df_raw.iloc[idx_start-1, 8]
-                if cek_valid(val_a_prev):
-                    produk_a = str(val_a_prev).strip()
-
-            # --- CARI PRODUK B (KANAN) ---
-            # Sesuai Info: KOLOM N (Index 13)
+            # --- AMBIL PRODUK A (KIRI) ---
+            # INSTRUKSI: KOLOM INDEX 8 (Kolom I)
+            val_a = str(df_raw.iloc[idx_produk, 8]).strip()
             
-            # Cek Baris 9, Kolom N (Index 13)
-            val_b = df_raw.iloc[idx_start, 13]
-            if cek_valid(val_b):
-                produk_b = str(val_b).strip()
-            else:
-                # Cek Baris 8 (Atasnya), Kolom N
-                val_b_prev = df_raw.iloc[idx_start-1, 13]
-                if cek_valid(val_b_prev):
-                    produk_b = str(val_b_prev).strip()
+            # Validasi: Tidak kosong & bukan header
+            if len(val_a) > 1 and "tonnage" not in val_a.lower() and "particle" not in val_a.lower():
+                produk_a = val_a
+
+            # --- AMBIL PRODUK B (KANAN) ---
+            # INSTRUKSI: KOLOM INDEX 13 (Kolom N)
+            val_b = str(df_raw.iloc[idx_produk, 13]).strip()
+            
+            if len(val_b) > 1 and "tonnage" not in val_b.lower() and "particle" not in val_b.lower():
+                produk_b = val_b
             
     except Exception as e:
         pass
 
     # ==========================================
-    # C. OLAH DATA TABEL (DIKEMBALIKAN KE ASAL)
+    # C. OLAH DATA TABEL (PERBAIKAN OUTPUT 0 TON)
     # ==========================================
+    
+    # Ambil data mulai dari baris Jam 9:00
     df = df_raw.iloc[idx_start:].copy() 
-    nama_kolom = [
-        "Jam Rotary A", "RM Rotary Moist A", "Rotary Moist A", 
-        "Jam Rotary B", "RM Rotary Moist B", "Rotary Moist B", 
-        "Jam Finish A", "Finish Moist A", "Finish Particle A", 
-        "Tonnage A", "Checker A", 
-        "Jam Finish B", "Finish Moist B", "Finish Particle B", 
-        "Tonnage B", "Checker B", "Remarks"
-    ]
-    df = df.iloc[:, :len(nama_kolom)]
-    if len(df.columns) < len(nama_kolom):
-        for i in range(len(nama_kolom) - len(df.columns)): df[f"Col_{i}"] = np.nan
-    df.columns = nama_kolom[:len(df.columns)]
     
-    # BERSIHKAN ANGKA
-    target_angka = ["RM Rotary Moist A", "Rotary Moist A", "RM Rotary Moist B", "Rotary Moist B", 
-                    "Finish Moist A", "Finish Particle A", "Finish Moist B", "Finish Particle B"]
+    # MAPPING KOLOM (PASTIKAN TONNAGE BENAR DI KOLOM 9 & 14)
+    # Index 9 = Kolom J (Sebelah Z 125)
+    # Index 14 = Kolom O (Sebelah Product Hold)
     
-    df_angka = df.copy()
-    for col in target_angka:
-        if col in df_angka.columns:
-            df_angka[col] = df_angka[col].astype(str).str.replace(',', '.', regex=False)
-            df_angka[col] = pd.to_numeric(df_angka[col], errors='coerce')
+    df_clean = pd.DataFrame()
+    max_col = df.shape[1]
+    
+    # Rotary A
+    df_clean["Jam Rotary A"]      = df.iloc[:, 0]
+    df_clean["RM Rotary Moist A"] = df.iloc[:, 1]
+    df_clean["Rotary Moist A"]    = df.iloc[:, 2]
+    
+    # Rotary B
+    df_clean["Jam Rotary B"]      = df.iloc[:, 3]
+    df_clean["RM Rotary Moist B"] = df.iloc[:, 4]
+    df_clean["Rotary Moist B"]    = df.iloc[:, 5]
+    
+    # Finish A (Index 7, 8, 9)
+    df_clean["Finish Moist A"]    = df.iloc[:, 7] if max_col > 7 else 0 
+    df_clean["Finish Particle A"] = df.iloc[:, 8] if max_col > 8 else 0 
+    df_clean["Tonnage A"]         = df.iloc[:, 9] if max_col > 9 else 0  # <-- TONNAGE A (INDEX 9)
+    
+    # Finish B (Index 12, 13, 14)
+    df_clean["Finish Moist B"]    = df.iloc[:, 12] if max_col > 12 else 0
+    df_clean["Finish Particle B"] = df.iloc[:, 13] if max_col > 13 else 0 
+    df_clean["Tonnage B"]         = df.iloc[:, 14] if max_col > 14 else 0 # <-- TONNAGE B (INDEX 14)
 
-    # HITUNG TONNAGE (DIPASTIKAN ADA)
+    # ==========================================
+    # D. BERSIHKAN ANGKA & HITUNG TONNAGE
+    # ==========================================
+    cols_angka = ["RM Rotary Moist A", "Rotary Moist A", "RM Rotary Moist B", "Rotary Moist B", 
+                  "Finish Moist A", "Finish Particle A", "Finish Moist B", "Finish Particle B"]
+    
+    for c in cols_angka:
+        df_clean[c] = df_clean[c].astype(str).str.replace(',', '.', regex=False)
+        df_clean[c] = pd.to_numeric(df_clean[c], errors='coerce')
+
+    # FUNGSI HITUNG TONNAGE (FIXED)
     def hitung_tonnage(series):
+        total = 0
         try:
-            valid = series.dropna()
+            # Ambil data yang valid
+            valid = series[~series.astype(str).isin(["-", "", "nan", "None"])].dropna()
             if not valid.empty:
-                val = str(valid.iloc[-1])
-                if "-" in val: return float(val.split("-")[-1])
-                elif val.replace('.','').isdigit(): return float(val)
-        except: return 0
-        return 0
+                last_val = str(valid.iloc[-1])
+                # Jika format "1-5", ambil 5
+                if "-" in last_val: 
+                    parts = last_val.split("-")
+                    clean_part = parts[-1].strip() # Hapus spasi
+                    if clean_part.replace('.','').isdigit():
+                        total = float(clean_part)
+                # Jika angka biasa "5"
+                elif last_val.replace('.','').isdigit(): 
+                    total = float(last_val)
+        except: 
+            total = 0
+        return total
 
-    total_ton_a = hitung_tonnage(df["Tonnage A"])
-    total_ton_b = hitung_tonnage(df["Tonnage B"]) 
+    total_ton_a = hitung_tonnage(df_clean["Tonnage A"])
+    total_ton_b = hitung_tonnage(df_clean["Tonnage B"]) 
     total_gabungan = total_ton_a + total_ton_b
 
     # ==========================================
     # E. TAMPILAN DASHBOARD
     # ==========================================
-    if not df.empty:
+    if not df_clean.empty:
         st.success(f"✅ Laporan: **{pilihan_bulan}** | Tanggal: **{pilihan_sheet}**")
         
         st.markdown("### 🏷️ Informasi Batch Produksi")
@@ -174,14 +178,15 @@ try:
         
         st.divider()
 
-        # ROTARY & FINISH (DATA INI SUDAH DIKEMBALIKAN)
+        # METRIK UTAMA
         st.subheader("🔥 Rotary Process (Gabungan A & B)")
-        gabungan_rm = pd.concat([df_angka["RM Rotary Moist A"], df_angka["RM Rotary Moist B"]])
-        gabungan_rot = pd.concat([df_angka["Rotary Moist A"], df_angka["Rotary Moist B"]])
+        
+        gab_rm = pd.concat([df_clean["RM Rotary Moist A"], df_clean["RM Rotary Moist B"]])
+        gab_rot = pd.concat([df_clean["Rotary Moist A"], df_clean["Rotary Moist B"]])
         
         m1, m2, m3 = st.columns(3)
-        m1.metric("RM Rotary Moist (Avg)", f"{gabungan_rm.mean():.2f}%", "40 Max")
-        m2.metric("Rotary Moist (Avg)", f"{gabungan_rot.mean():.2f}%", "12-15")
+        m1.metric("RM Rotary Moist (Avg)", f"{gab_rm.mean():.2f}%", "40 Max")
+        m2.metric("Rotary Moist (Avg)", f"{gab_rot.mean():.2f}%", "12-15")
         m3.metric("Total Output Harian", f"{total_gabungan:.0f} TON", "A + B")
         
         st.markdown("---")
@@ -190,20 +195,20 @@ try:
         with ca:
             st.markdown(f"#### 🅰️ LINE A")
             c1, c2 = st.columns(2)
-            c1.metric("Moisture A", f"{df_angka['Finish Moist A'].mean():.2f}%")
-            c2.metric("Particle Size A", f"{df_angka['Finish Particle A'].mean():.2f}")
+            c1.metric("Moisture A", f"{df_clean['Finish Moist A'].mean():.2f}%")
+            c2.metric("Particle Size A", f"{df_clean['Finish Particle A'].mean():.2f}")
             st.metric("Produksi Line A", f"{total_ton_a:.0f} TON")
 
         with cb:
             st.markdown(f"#### 🅱️ LINE B")
             c3, c4 = st.columns(2)
-            c3.metric("Moisture B", f"{df_angka['Finish Moist B'].mean():.2f}%")
-            c4.metric("Particle Size B", f"{df_angka['Finish Particle B'].mean():.2f}")
+            c3.metric("Moisture B", f"{df_clean['Finish Moist B'].mean():.2f}%")
+            c4.metric("Particle Size B", f"{df_clean['Finish Particle B'].mean():.2f}")
             st.metric("Produksi Line B", f"{total_ton_b:.0f} TON")
 
         st.divider()
         with st.expander("🔍 Lihat Tabel Data Mentah"):
-            st.dataframe(df, use_container_width=True)
+            st.dataframe(df_clean, use_container_width=True)
     else:
         st.warning("Data kosong.")
 
