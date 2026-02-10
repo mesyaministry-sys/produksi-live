@@ -30,12 +30,11 @@ with st.sidebar:
 url = f'https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={pilihan_sheet}'
 
 try:
-    # A. BACA DATA RAW
-    # dtype=str & keep_default_na=False wajib agar data teks tidak hilang
+    # A. BACA DATA RAW (MODE AMAN)
     df_raw = pd.read_csv(url, header=None, dtype=str, keep_default_na=False)
 
     # ==========================================
-    # B. SPIDER WEB SCAN (JARING SEGALA ARAH) 🕸️
+    # B. SPIDER WEB SCAN (DENGAN PEMBATAS) 🕸️
     # ==========================================
     produk_a = "-"
     produk_b = "-"
@@ -48,16 +47,16 @@ try:
         
         if not matches.empty:
             idx_center = matches[0]
-            idx_start = idx_center # Untuk tabel bawah
+            idx_start = idx_center 
             
-            # BLACKLIST KATA
+            # BLACKLIST (TAMBAH NAMA CHECKER)
             blacklist = ["nan", "none", "-", "", "moisture", "particle", "mesh", "null", 
-                         "time", "tonnage", "paraph", "checker", "ok", "no", "shift", "max", "min", "avg"]
+                         "time", "tonnage", "paraph", "checker", "ok", "no", "shift", 
+                         "max", "min", "avg", "phadla", "reza", "qc", "admin"]
             
             # FUNGSI PENCARI
             def find_product(row_indices, col_start, col_end):
                 candidates = []
-                # Kita cari di baris pusat, baris atasnya, dan baris bawahnya
                 for r in row_indices:
                     if r < 0 or r >= len(df_raw): continue
                     
@@ -65,25 +64,29 @@ try:
                     vals = df_raw.iloc[r, col_start:col_end].values.flatten()
                     for v in vals:
                         v_clean = str(v).strip()
+                        # Syarat: Panjang > 1 dan Bukan Sampah
                         if len(v_clean) > 1 and v_clean.lower() not in blacklist:
                             # Harus ada HURUF (A-Z)
                             if re.search('[a-zA-Z]', v_clean):
                                 candidates.append(v_clean)
                 
-                # Jika ada banyak kandidat, ambil yang pertama ditemukan
                 if candidates:
                     return candidates[0]
                 return "-"
 
-            # AREA JARINGAN (Berdasarkan baris 9:00 +/- 1 baris)
+            # AREA JARINGAN (Cek baris Pusat, Atas, Bawah)
             rows_to_scan = [idx_center, idx_center-1, idx_center+1]
             
-            # SCAN ZONA KIRI (LINE A) -> Kolom 6 s/d 11
-            res_a = find_product(rows_to_scan, 6, 11)
+            # --- KOREKSI AREA SCAN (SEMPITKAN!) ---
+            
+            # SCAN LINE A: Kolom 6 s/d 10 (G, H, I, J). 
+            # Kolom 10 (K) adalah Paraf PHADLA -> JANGAN DIAMBIL!
+            res_a = find_product(rows_to_scan, 6, 10)
             if res_a != "-": produk_a = res_a
 
-            # SCAN ZONA KANAN (LINE B) -> Kolom 11 s/d 20
-            res_b = find_product(rows_to_scan, 11, 21)
+            # SCAN LINE B: Kolom 11 s/d 15 (L, M, N, O).
+            # Kolom 15 (P) adalah Paraf -> JANGAN DIAMBIL!
+            res_b = find_product(rows_to_scan, 11, 15)
             if res_b != "-": produk_b = res_b
             
     except Exception as e:
@@ -200,7 +203,7 @@ try:
         
         st.divider()
 
-        # --- ROTARY & FINISH (SAMA SEPERTI SEBELUMNYA) ---
+        # --- ROTARY & FINISH ---
         st.subheader("🔥 Rotary Process (Gabungan A & B)")
         
         gabungan_rm = pd.concat([df_angka["RM Rotary Moist A"], df_angka["RM Rotary Moist B"]])
