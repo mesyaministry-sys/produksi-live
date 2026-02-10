@@ -80,14 +80,10 @@ try:
         return True
 
     # --- CARI PRODUK A (KOLOM J / Index 9) ---
-    # Kita cek: Baris 9:00, Baris Atasnya (8:00), Baris Atasnya Lagi (Produk)
-    # Range check: idx_900 (baris 9) sampai idx_900 - 3 (naik 3 baris)
     for r in range(idx_900, max(0, idx_900-4), -1):
-        # Cek area kolom 8, 9, 10
         for c in [8, 9, 10]:
             val = df_raw.iloc[r, c]
             if valid_prod(val):
-                # Prioritas: Ada Angka (Z 125)
                 if any(char.isdigit() for char in str(val)):
                     produk_a = str(val).strip()
                     break
@@ -95,11 +91,9 @@ try:
 
     # --- CARI PRODUK B (KOLOM O / Index 14) ---
     for r in range(idx_900, max(0, idx_900-4), -1):
-        # Cek area kolom 13, 14, 15
         for c in [13, 14, 15]:
             val = df_raw.iloc[r, c]
             if valid_prod(val):
-                # Prioritas: Huruf Besar (HOLD)
                 if str(val).isupper():
                     produk_b = str(val).strip()
                     break
@@ -115,16 +109,13 @@ try:
     f_bakar = "-"
     f_loading = "-"
     
-    # Scan Baris 25 s/d 50
+    # Scan Baris 25 s/d 60
     for i in range(25, min(60, len(df_raw))):
-        # Gabung baris jadi kalimat
         row_txt = " ".join(df_raw.iloc[i].astype(str).values).upper()
         row_txt = row_txt.replace("_", " ").replace("  ", " ")
         
-        # Logika Pengambilan Data setelah ":"
         if "BBKU" in row_txt and ":" in row_txt:
             raw = row_txt.split(":")[-1].strip()
-            # Bersihkan jika ada kata "FORMULA" nyangkut
             f_bbku = raw.split("FORMULA")[0].strip()
             
         if "BAHAN BAKAR" in row_txt and ":" in row_txt:
@@ -134,7 +125,6 @@ try:
         if "LOADING" in row_txt and ":" in row_txt:
             f_loading = row_txt.split(":")[-1].strip()
 
-    # Bersihkan sisa
     for x in [f_bbku, f_bakar, f_loading]:
         x = x.replace("NAN", "").replace(",", "").strip()
     
@@ -145,11 +135,7 @@ try:
     # ==========================================
     # E. DATA ANGKA
     # ==========================================
-    # Ambil data mulai dari baris pertama (biasanya jam 8:00 atau 9:00)
-    # Kita cari baris paling atas yang ada angka jam-nya
     idx_data_start = idx_900
-    
-    # Cek mundur, apakah jam 8:00 ada?
     if "8" in str(df_raw.iloc[idx_900-1, 0]):
         idx_data_start = idx_900 - 1
         
@@ -157,12 +143,13 @@ try:
     
     df_clean = pd.DataFrame()
     
-    # MAPPING KOLOM (Sesuai Gambar 28.jpg)
-    df_clean["Jam Rotary A"]      = df.iloc[:, 0]
+    # MAPPING KOLOM
+    # Kita rename kolom "Jam" agar nanti bisa dideteksi oleh Grafik
+    df_clean["Jam"]               = df.iloc[:, 0] 
+    
     df_clean["RM Rotary Moist A"] = df.iloc[:, 1]
     df_clean["Rotary Moist A"]    = df.iloc[:, 2]
     
-    df_clean["Jam Rotary B"]      = df.iloc[:, 3]
     df_clean["RM Rotary Moist B"] = df.iloc[:, 4]
     df_clean["Rotary Moist B"]    = df.iloc[:, 5]
     
@@ -203,7 +190,7 @@ try:
     total_gabungan = total_ton_a + total_ton_b
 
     # ==========================================
-    # F. TAMPILAN
+    # F. TAMPILAN DASHBOARD
     # ==========================================
     if not df_clean.empty:
         st.success(f"✅ Laporan: **{pilihan_bulan}** | Tanggal: **{pilihan_sheet}**")
@@ -235,6 +222,7 @@ try:
 
         st.divider()
         
+        # --- METRIK ANGKA ---
         rm_a = df_clean[df_clean["RM Rotary Moist A"] > 0]["RM Rotary Moist A"]
         rm_b = df_clean[df_clean["RM Rotary Moist B"] > 0]["RM Rotary Moist B"]
         avg_rm = pd.concat([rm_a, rm_b]).mean()
@@ -248,8 +236,36 @@ try:
         m2.metric("Rotary Moist (Avg)", f"{avg_rot:.2f}%", "12-15")
         m3.metric("Total Output Harian", f"{total_gabungan:.0f} TON", "A + B")
         
+        # ==========================================
+        # 📈 FITUR GRAFIK (BARU DITAMBAHKAN DISINI)
+        # ==========================================
         st.markdown("---")
+        st.subheader("📈 Grafik Tren Harian")
 
+        # Persiapan Data: Buang baris yang jam-nya kosong
+        chart_data = df_clean.dropna(subset=["Jam"]).copy()
+
+        # GRAFIK 1: ROTARY MOISTURE (Line A vs B)
+        st.caption("Tren RM Rotary Moisture (%)")
+        st.line_chart(
+            chart_data,
+            x="Jam",
+            y=["RM Rotary Moist A", "RM Rotary Moist B"],
+            color=["#3498db", "#e74c3c"] # Biru vs Merah
+        )
+
+        # GRAFIK 2: FINISH PRODUCT MOISTURE
+        st.caption("Tren Finish Product Moisture (%)")
+        st.line_chart(
+            chart_data,
+            x="Jam",
+            y=["Finish Moist A", "Finish Moist B"],
+            color=["#2ecc71", "#f1c40f"] # Hijau vs Kuning
+        )
+        
+        st.divider()
+
+        # --- DETAIL PER LINE ---
         ca, cb = st.columns(2)
         with ca:
             st.markdown(f"#### 🅰️ LINE A")
@@ -273,5 +289,3 @@ try:
 
 except Exception as e:
     st.error(f"Error: {str(e)}")
-
-
