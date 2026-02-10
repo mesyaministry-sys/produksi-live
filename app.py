@@ -15,7 +15,7 @@ DAFTAR_FILE = {
 
 st.set_page_config(page_title="Monitoring Produksi", layout="wide")
 st.title("🏭 Monitoring Produksi Live")
-st.caption("Created & Developer : Mahesya | 2026 | QC System Active 🚦") 
+st.caption("Created & Developer : Mahesya | 2026 🚦") 
 
 # ==========================================
 # 1. MENU SAMPING
@@ -255,36 +255,50 @@ try:
         )
 
         st.subheader("🔍 Quality Control Data Check (🚦)")
+        st.caption("Indikator Warna: 🟢 Aman | 🟡 Waspada | 🔴 Bahaya")
         
         # ==========================================
-        # 🚦 DEFINISI WARNA LAMPU QC
+        # 🚦 DEFINISI WARNA LAMPU QC (UPDATED)
         # ==========================================
         def qc_highlight(row):
             styles = [''] * len(row)
             
-            # --- CEK LINE A ---
-            if pd.notnull(row["Finish Moist A"]):
-                val = row["Finish Moist A"]
-                # Cek Kolom Finish A
-                try:
-                    idx = df_clean.columns.get_loc("Finish Moist A")
-                    if val > 15: 
-                        styles[idx] = 'background-color: #ff4b4b; color: white; font-weight: bold;' # MERAH
-                    else: 
-                        styles[idx] = 'background-color: #2ecc71; color: black; font-weight: bold;' # HIJAU
-                except: pass
+            # ----------------------------------------
+            # 1. ATURAN WARNA ROTARY MOIST (A & B)
+            #    <= 13.9 : Hijau
+            #    14.0 - 15.9 : Kuning
+            #    >= 16.0 : Merah
+            # ----------------------------------------
+            for col in ["Rotary Moist A", "Rotary Moist B"]:
+                if col in df_clean.columns and pd.notnull(row[col]):
+                    try:
+                        val = float(row[col])
+                        idx = df_clean.columns.get_loc(col)
+                        
+                        if val >= 16.0:
+                            styles[idx] = 'background-color: #ff4b4b; color: white; font-weight: bold;' # Merah
+                        elif val >= 14.0:
+                            styles[idx] = 'background-color: #f1c40f; color: black; font-weight: bold;' # Kuning
+                        else:
+                            styles[idx] = 'background-color: #2ecc71; color: black; font-weight: bold;' # Hijau
+                    except: pass
 
-            # --- CEK LINE B ---
-            if pd.notnull(row["Finish Moist B"]):
-                val = row["Finish Moist B"]
-                # Cek Kolom Finish B
-                try:
-                    idx = df_clean.columns.get_loc("Finish Moist B")
-                    if val > 15: 
-                        styles[idx] = 'background-color: #ff4b4b; color: white; font-weight: bold;' # MERAH
-                    else: 
-                        styles[idx] = 'background-color: #2ecc71; color: black; font-weight: bold;' # HIJAU
-                except: pass
+            # ----------------------------------------
+            # 2. ATURAN WARNA FINISH PRODUCT (A & B)
+            #    > 15.0 : Merah
+            #    <= 15.0 : Hijau
+            # ----------------------------------------
+            for col in ["Finish Moist A", "Finish Moist B"]:
+                if col in df_clean.columns and pd.notnull(row[col]):
+                    try:
+                        val = float(row[col])
+                        idx = df_clean.columns.get_loc(col)
+                        
+                        if val > 15.0: 
+                            styles[idx] = 'background-color: #ff4b4b; color: white; font-weight: bold;' # Merah
+                        else: 
+                            styles[idx] = 'background-color: #2ecc71; color: black; font-weight: bold;' # Hijau
+                    except: pass
 
             return styles
 
