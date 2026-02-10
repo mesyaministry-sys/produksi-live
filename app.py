@@ -47,7 +47,7 @@ try:
     df_raw = pd.read_csv(url, header=None, dtype=str, keep_default_na=False)
 
     # ==========================================
-    # B. SMART SEARCH (PERBAIKAN: TEMBAK LANGSUNG KOLOM I & N)
+    # B. SMART SEARCH (PERBAIKAN: INDEX I & N + ANTI-RANGE)
     # ==========================================
     produk_a = "-"
     produk_b = "-"
@@ -59,38 +59,54 @@ try:
         matches = scan_area[scan_area.str.contains(r"9[:\.]00", regex=True)].index
         
         if not matches.empty:
-            idx_start = matches[0] # Baris Jam 9:00 (Row 9 di Excel)
+            idx_start = matches[0] # Ini Baris 9 (Jam 9:00)
             
-            # --- AMBIL PRODUK A (KIRI) ---
-            # Target: Kolom I (Index 8)
-            # Kita ambil range aman: Kolom H, I, J (Index 7, 8, 9) untuk jaga-jaga geser dikit
-            vals_a = df_raw.iloc[idx_start, 7:10].values.flatten()
-            
-            for v in vals_a:
-                t = str(v).strip()
-                # Filter: Bukan angka murni, bukan kosong, bukan header
-                if len(t) > 1 and not t.replace('.','').replace(',','').isdigit():
-                     if "max" not in t.lower() and "min" not in t.lower() and "mesh" not in t.lower():
-                        produk_a = t
-                        break # Ketemu langsung stop (Prioritas Kolom I)
+            # --- FUNGSI VALIDASI KHUSUS ---
+            def cek_valid(val):
+                t = str(val).strip()
+                # Tolak jika kosong atau kependekan
+                if len(t) < 2: return False
+                # Tolak Angka Murni (misal: "80,01")
+                if t.replace('.', '').replace(',', '').isdigit(): return False
+                # Tolak Range Angka (misal: "1-5", "1-14") <- INI YANG PENTING
+                if re.match(r'^\d+-\d+$', t): return False
+                # Tolak Header
+                blacklist = ["moisture", "particle", "mesh", "max", "min", "checker", "paraph"]
+                if any(x in t.lower() for x in blacklist): return False
+                return True
 
-            # --- AMBIL PRODUK B (KANAN) ---
-            # Target: Kolom N (Index 13)
-            # Kita ambil range aman: Kolom M, N, O (Index 12, 13, 14)
-            vals_b = df_raw.iloc[idx_start, 12:15].values.flatten()
+            # --- CARI PRODUK A (KIRI) ---
+            # Sesuai Info: KOLOM I (Index 8)
+            # Kita cek di baris jam 9:00, kalau gak ada cek 1 baris di atasnya
             
-            for v in vals_b:
-                t = str(v).strip()
-                if len(t) > 1 and not t.replace('.','').replace(',','').isdigit():
-                     if "max" not in t.lower() and "min" not in t.lower() and "juan" not in t.lower():
-                        produk_b = t
-                        break
+            # Cek Baris 9, Kolom I (Index 8)
+            val_a = df_raw.iloc[idx_start, 8] 
+            if cek_valid(val_a):
+                produk_a = str(val_a).strip()
+            else:
+                # Cek Baris 8 (Atasnya), Kolom I
+                val_a_prev = df_raw.iloc[idx_start-1, 8]
+                if cek_valid(val_a_prev):
+                    produk_a = str(val_a_prev).strip()
+
+            # --- CARI PRODUK B (KANAN) ---
+            # Sesuai Info: KOLOM N (Index 13)
+            
+            # Cek Baris 9, Kolom N (Index 13)
+            val_b = df_raw.iloc[idx_start, 13]
+            if cek_valid(val_b):
+                produk_b = str(val_b).strip()
+            else:
+                # Cek Baris 8 (Atasnya), Kolom N
+                val_b_prev = df_raw.iloc[idx_start-1, 13]
+                if cek_valid(val_b_prev):
+                    produk_b = str(val_b_prev).strip()
             
     except Exception as e:
         pass
 
     # ==========================================
-    # C. OLAH DATA TABEL (DIKEMBALIKAN KE SCRIPT ASLI)
+    # C. OLAH DATA TABEL (DIKEMBALIKAN KE ASAL)
     # ==========================================
     df = df_raw.iloc[idx_start:].copy() 
     nama_kolom = [
@@ -116,7 +132,7 @@ try:
             df_angka[col] = df_angka[col].astype(str).str.replace(',', '.', regex=False)
             df_angka[col] = pd.to_numeric(df_angka[col], errors='coerce')
 
-    # HITUNG TONNAGE (INI YANG TADI HILANG, SAYA KEMBALIKAN)
+    # HITUNG TONNAGE (DIPASTIKAN ADA)
     def hitung_tonnage(series):
         try:
             valid = series.dropna()
@@ -129,7 +145,7 @@ try:
 
     total_ton_a = hitung_tonnage(df["Tonnage A"])
     total_ton_b = hitung_tonnage(df["Tonnage B"]) 
-    total_gabungan = total_ton_a + total_ton_b # <-- INI SUDAH ADA LAGI
+    total_gabungan = total_ton_a + total_ton_b
 
     # ==========================================
     # E. TAMPILAN DASHBOARD
@@ -158,14 +174,14 @@ try:
         
         st.divider()
 
-        # ROTARY & FINISH
+        # ROTARY & FINISH (DATA INI SUDAH DIKEMBALIKAN)
         st.subheader("🔥 Rotary Process (Gabungan A & B)")
-        gab_rm = pd.concat([df_angka["RM Rotary Moist A"], df_angka["RM Rotary Moist B"]])
-        gab_rot = pd.concat([df_angka["Rotary Moist A"], df_angka["Rotary Moist B"]])
+        gabungan_rm = pd.concat([df_angka["RM Rotary Moist A"], df_angka["RM Rotary Moist B"]])
+        gabungan_rot = pd.concat([df_angka["Rotary Moist A"], df_angka["Rotary Moist B"]])
         
         m1, m2, m3 = st.columns(3)
         m1.metric("RM Rotary Moist (Avg)", f"{gabungan_rm.mean():.2f}%", "40 Max")
-        m2.metric("Rotary Moist (Avg)", f"{gab_rot.mean():.2f}%", "12-15")
+        m2.metric("Rotary Moist (Avg)", f"{gabungan_rot.mean():.2f}%", "12-15")
         m3.metric("Total Output Harian", f"{total_gabungan:.0f} TON", "A + B")
         
         st.markdown("---")
