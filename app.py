@@ -34,50 +34,45 @@ try:
     df_raw = pd.read_csv(url, header=None)
 
     # ==========================================
-    # B. SMART SEARCH (SCANNER DIPERLUAS) 📡
+    # B. SMART SEARCH (HANYA TERIMA HURUF) 🕵️‍♂️
     # ==========================================
     produk_a = "-"
     produk_b = "-"
     idx_start = 6 # Default fallback
 
     try:
-        # 1. Cari dulu baris mana yang ada tulisan "9:00"
-        scan_area = df_raw.iloc[:20, 0].astype(str) # Cek 20 baris pertama
+        # 1. Cari dulu baris mana yang ada tulisan "9:00" di Kolom A
+        scan_area = df_raw.iloc[:20, 0].astype(str) 
         matches = scan_area[scan_area.str.contains("9:00", na=False)].index
         
         if not matches.empty:
             idx_start = matches[0] # Ini nomor baris yang BENAR
             
-            # FUNGSI PENCARI PINTAR
-            def scan_range(row_idx, col_start, col_end):
-                # Ambil data dari rentang kolom
-                vals = df_raw.iloc[row_idx, col_start:col_end].astype(str)
-                found = []
-                for v in vals:
-                    v_clean = v.strip()
-                    # Abaikan data kosong atau strip
-                    if v_clean.lower() not in ["nan", "-", "none", "", "ok", "no"]:
-                        found.append(v_clean)
-                
-                # PRIORITAS: Ambil yang mengandung HURUF (misal "Z 125")
-                for f in found:
-                    if re.search('[a-zA-Z]', f):
-                        return f
-                # CADANGAN: Kalau tidak ada huruf, ambil angka pun boleh
-                if found:
-                    return found[0]
-                return "-"
+            # --- CARI PRODUK LINE A (Z 125) ---
+            # Area: Kolom 6 (G) sampai 11 (K). Posisi Merge H-I-J ada disini.
+            vals_a = df_raw.iloc[idx_start, 6:11].astype(str).values.flatten()
+            
+            for v in vals_a:
+                v_clean = v.strip()
+                # SYARAT MUTLAK: Harus mengandung HURUF (A-Z)
+                # Ini biar angka "10,1" atau "11,36" DITOLAK.
+                if re.search('[a-zA-Z]', v_clean):
+                    # Filter kata sampah
+                    if v_clean.lower() not in ["nan", "none", "-", "moisture", "particle", "mesh"]:
+                        produk_a = v_clean
+                        break # Ketemu Z 125, stop pencarian.
 
-            # SCAN LINE A: 
-            # KOREKSI: Kita mulai dari Kolom 6 (G) sampai 10 (K)
-            # Sebelumnya mulai dari 7, makanya Z 125 (di G) terlewat.
-            res_a = scan_range(idx_start, 6, 11)
-            if res_a != "-": produk_a = res_a
-
-            # SCAN LINE B: 
-            # Kita mulai dari Kolom 11 (L) sampai 16
-            res_b = scan_range(idx_start, 11, 16)
-            if res_b != "-": produk_b = res_b
+            # --- CARI PRODUK LINE B (PRODUCT HOLD BLEND) ---
+            # Area: Kolom 11 (L) sampai 16 (Q).
+            vals_b = df_raw.iloc[idx_start, 11:17].astype(str).values.flatten()
+            
+            for v in vals_b:
+                v_clean = v.strip()
+                # Syarat sama: Harus ada huruf
+                if re.search('[a-zA-Z]', v_clean):
+                    if v_clean.lower() not in ["nan", "none", "-", "moisture", "particle"]:
+                        produk_b = v_clean
+                        break
             
     except Exception as e:
         pass
