@@ -144,7 +144,6 @@ try:
     df_clean = pd.DataFrame()
     
     # MAPPING KOLOM
-    # Kita rename kolom "Jam" agar nanti bisa dideteksi oleh Grafik
     df_clean["Jam"]               = df.iloc[:, 0] 
     
     df_clean["RM Rotary Moist A"] = df.iloc[:, 1]
@@ -236,8 +235,26 @@ try:
         m2.metric("Rotary Moist (Avg)", f"{avg_rot:.2f}%", "12-15")
         m3.metric("Total Output Harian", f"{total_gabungan:.0f} TON", "A + B")
         
+        st.markdown("---")
+
+        # --- DETAIL PER LINE (POSISI DI ATAS GRAFIK) ---
+        ca, cb = st.columns(2)
+        with ca:
+            st.markdown(f"#### 🅰️ LINE A")
+            c1, c2 = st.columns(2)
+            c1.metric("Moisture A", f"{df_clean['Finish Moist A'].mean():.2f}%")
+            c2.metric("Particle A", f"{df_clean['Finish Particle A'].mean():.2f}")
+            st.metric("Produksi Line A", f"{total_ton_a:.0f} TON")
+
+        with cb:
+            st.markdown(f"#### 🅱️ LINE B")
+            c3, c4 = st.columns(2)
+            c3.metric("Moisture B", f"{df_clean['Finish Moist B'].mean():.2f}%")
+            c4.metric("Particle B", f"{df_clean['Finish Particle B'].mean():.2f}")
+            st.metric("Produksi Line B", f"{total_ton_b:.0f} TON")
+
         # ==========================================
-        # 📈 FITUR GRAFIK (BARU DITAMBAHKAN DISINI)
+        # 📈 FITUR GRAFIK (PINDAH KE BAWAH)
         # ==========================================
         st.markdown("---")
         st.subheader("📈 Grafik Tren Harian")
@@ -263,24 +280,6 @@ try:
             color=["#2ecc71", "#f1c40f"] # Hijau vs Kuning
         )
         
-        st.divider()
-
-        # --- DETAIL PER LINE ---
-        ca, cb = st.columns(2)
-        with ca:
-            st.markdown(f"#### 🅰️ LINE A")
-            c1, c2 = st.columns(2)
-            c1.metric("Moisture A", f"{df_clean['Finish Moist A'].mean():.2f}%")
-            c2.metric("Particle A", f"{df_clean['Finish Particle A'].mean():.2f}")
-            st.metric("Produksi Line A", f"{total_ton_a:.0f} TON")
-
-        with cb:
-            st.markdown(f"#### 🅱️ LINE B")
-            c3, c4 = st.columns(2)
-            c3.metric("Moisture B", f"{df_clean['Finish Moist B'].mean():.2f}%")
-            c4.metric("Particle B", f"{df_clean['Finish Particle B'].mean():.2f}")
-            st.metric("Produksi Line B", f"{total_ton_b:.0f} TON")
-
         st.divider()
         with st.expander("🔍 Lihat Tabel Data Mentah"):
             st.dataframe(df_clean, use_container_width=True)
