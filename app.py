@@ -30,47 +30,47 @@ with st.sidebar:
 url = f'https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={pilihan_sheet}'
 
 try:
-    # A. BACA DATA RAW
-    df_raw = pd.read_csv(url, header=None)
+    # A. BACA DATA RAW (DENGAN MODE TEXT AMAN)
+    # dtype=str adalah KUNCI agar "Z 125" tidak dihapus oleh pandas
+    df_raw = pd.read_csv(url, header=None, dtype=str)
 
     # ==========================================
-    # B. SMART SEARCH (HANYA TERIMA HURUF) 🕵️‍♂️
+    # B. SMART SEARCH (MENCARI Z 125) 🕵️‍♂️
     # ==========================================
     produk_a = "-"
     produk_b = "-"
     idx_start = 6 # Default fallback
 
     try:
-        # 1. Cari dulu baris mana yang ada tulisan "9:00" di Kolom A
-        scan_area = df_raw.iloc[:20, 0].astype(str) 
+        # 1. Cari baris "9:00"
+        # Karena sudah dtype=str, kita tidak perlu astype(str) lagi, tapi jaga-jaga
+        scan_area = df_raw.iloc[:20, 0].fillna("")
         matches = scan_area[scan_area.str.contains("9:00", na=False)].index
         
         if not matches.empty:
             idx_start = matches[0] # Ini nomor baris yang BENAR
             
             # --- CARI PRODUK LINE A (Z 125) ---
-            # Area: Kolom 6 (G) sampai 11 (K). Posisi Merge H-I-J ada disini.
-            vals_a = df_raw.iloc[idx_start, 6:11].astype(str).values.flatten()
+            # Area: Kolom 6 (G) s/d 11 (K). Mengcover H, I, J.
+            vals_a = df_raw.iloc[idx_start, 6:11].fillna("").values.flatten()
             
             for v in vals_a:
                 v_clean = v.strip()
-                # SYARAT MUTLAK: Harus mengandung HURUF (A-Z)
-                # Ini biar angka "10,1" atau "11,36" DITOLAK.
+                # CARI YANG ADA HURUFNYA
                 if re.search('[a-zA-Z]', v_clean):
-                    # Filter kata sampah
-                    if v_clean.lower() not in ["nan", "none", "-", "moisture", "particle", "mesh"]:
+                    # Filter kata bawaan excel
+                    if v_clean.lower() not in ["nan", "none", "-", "moisture", "particle", "mesh", "null"]:
                         produk_a = v_clean
-                        break # Ketemu Z 125, stop pencarian.
+                        break 
 
             # --- CARI PRODUK LINE B (PRODUCT HOLD BLEND) ---
-            # Area: Kolom 11 (L) sampai 16 (Q).
-            vals_b = df_raw.iloc[idx_start, 11:17].astype(str).values.flatten()
+            # Area: Kolom 11 (L) s/d 17 (Q).
+            vals_b = df_raw.iloc[idx_start, 11:18].fillna("").values.flatten()
             
             for v in vals_b:
                 v_clean = v.strip()
-                # Syarat sama: Harus ada huruf
                 if re.search('[a-zA-Z]', v_clean):
-                    if v_clean.lower() not in ["nan", "none", "-", "moisture", "particle"]:
+                    if v_clean.lower() not in ["nan", "none", "-", "moisture", "particle", "mesh", "null"]:
                         produk_b = v_clean
                         break
             
@@ -111,7 +111,7 @@ try:
             df[f"Col_{i}"] = np.nan
     df.columns = nama_kolom[:len(df.columns)]
     
-    # D. BERSIHKAN ANGKA
+    # D. BERSIHKAN ANGKA (KONVERSI MANUAL DARI TEXT KE ANGKA)
     target_angka = [
         "RM Rotary Moist A", "Rotary Moist A", 
         "RM Rotary Moist B", "Rotary Moist B", 
@@ -122,6 +122,7 @@ try:
     df_angka = df.copy()
     for col in target_angka:
         if col in df_angka.columns:
+            # Ganti koma jadi titik, lalu paksa jadi angka
             df_angka[col] = df_angka[col].astype(str).str.replace(',', '.', regex=False)
             df_angka[col] = pd.to_numeric(df_angka[col], errors='coerce')
 
@@ -130,6 +131,9 @@ try:
         total = 0
         try:
             data_valid = series_data.dropna()
+            # Filter yang bukan strip/kosong
+            data_valid = data_valid[~data_valid.isin(["-", "nan", "None", ""])]
+            
             if not data_valid.empty:
                 last_val = str(data_valid.iloc[-1])
                 if "-" in last_val:
@@ -168,7 +172,7 @@ try:
         """, unsafe_allow_html=True)
 
         with col_info_1:
-            val_a_display = produk_a if produk_a not in ["-", "nan"] else "(Kosong)"
+            val_a_display = produk_a if produk_a not in ["-", "nan", ""] else "(Belum Diisi)"
             st.markdown(f"""
             <div class="box-info biru">
                 <div class="judul">JENIS PRODUK A (KIRI)</div>
@@ -177,7 +181,7 @@ try:
             """, unsafe_allow_html=True)
             
         with col_info_2:
-            val_b_display = produk_b if produk_b not in ["-", "nan"] else "(Kosong)"
+            val_b_display = produk_b if produk_b not in ["-", "nan", ""] else "(Kosong)"
             st.markdown(f"""
             <div class="box-info merah">
                 <div class="judul">JENIS PRODUK B (KANAN)</div>
@@ -232,4 +236,3 @@ try:
 
 except Exception as e:
     st.error("Sedang memuat data...")
-
