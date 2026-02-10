@@ -30,58 +30,60 @@ with st.sidebar:
 url = f'https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={pilihan_sheet}'
 
 try:
-    # A. BACA DATA RAW (MODE SUPER TEXT)
-    # keep_default_na=False: Sel kosong dibaca sebagai string kosong "", bukan NaN.
-    # Ini PENTING agar "Z 125" tidak hilang jika dianggap aneh oleh pandas.
+    # A. BACA DATA RAW
+    # dtype=str & keep_default_na=False wajib agar data teks tidak hilang
     df_raw = pd.read_csv(url, header=None, dtype=str, keep_default_na=False)
 
     # ==========================================
-    # B. SMART SEARCH (FINAL EDITION) 📡
+    # B. SPIDER WEB SCAN (JARING SEGALA ARAH) 🕸️
     # ==========================================
     produk_a = "-"
     produk_b = "-"
-    idx_start = 6 # Default fallback
+    idx_start = 6 
 
     try:
-        # 1. Cari baris "9:00"
+        # 1. Cari titik pusat: Baris "9:00"
         scan_area = df_raw.iloc[:25, 0].astype(str)
-        # Regex mencari angka 9 diikuti titik/titik dua dan 00 (misal 9:00, 09.00)
         matches = scan_area[scan_area.str.contains(r"9[:\.]00", regex=True)].index
         
         if not matches.empty:
-            idx_start = matches[0]
+            idx_center = matches[0]
+            idx_start = idx_center # Untuk tabel bawah
             
-            # --- BLACKLIST KATA SAMPAH ---
+            # BLACKLIST KATA
             blacklist = ["nan", "none", "-", "", "moisture", "particle", "mesh", "null", 
-                         "time", "tonnage", "paraph", "checker", "ok", "no", "shift"]
+                         "time", "tonnage", "paraph", "checker", "ok", "no", "shift", "max", "min", "avg"]
             
-            # FUNGSI SCAN PINTAR
-            def scan_row_segment(row_idx, start_col, end_col):
-                # Ambil data satu baris horizontal
-                vals = df_raw.iloc[row_idx, start_col:end_col].values.flatten()
+            # FUNGSI PENCARI
+            def find_product(row_indices, col_start, col_end):
                 candidates = []
-                for v in vals:
-                    v_clean = str(v).strip()
-                    if len(v_clean) > 1: # Abaikan teks terlalu pendek
-                        # Cek apakah bukan sampah
-                        if v_clean.lower() not in blacklist:
-                            # SYARAT: Mengandung Huruf (A-Z)
+                # Kita cari di baris pusat, baris atasnya, dan baris bawahnya
+                for r in row_indices:
+                    if r < 0 or r >= len(df_raw): continue
+                    
+                    # Ambil data horizontal
+                    vals = df_raw.iloc[r, col_start:col_end].values.flatten()
+                    for v in vals:
+                        v_clean = str(v).strip()
+                        if len(v_clean) > 1 and v_clean.lower() not in blacklist:
+                            # Harus ada HURUF (A-Z)
                             if re.search('[a-zA-Z]', v_clean):
                                 candidates.append(v_clean)
                 
-                # Jika ada kandidat, ambil yang pertama
+                # Jika ada banyak kandidat, ambil yang pertama ditemukan
                 if candidates:
                     return candidates[0]
                 return "-"
 
-            # SCAN LINE A (Perluas dari Kolom 5 s/d 12)
-            # Area ini mencakup Rotary Kanan sampai batas Checker
-            res_a = scan_row_segment(idx_start, 5, 12)
+            # AREA JARINGAN (Berdasarkan baris 9:00 +/- 1 baris)
+            rows_to_scan = [idx_center, idx_center-1, idx_center+1]
+            
+            # SCAN ZONA KIRI (LINE A) -> Kolom 6 s/d 11
+            res_a = find_product(rows_to_scan, 6, 11)
             if res_a != "-": produk_a = res_a
 
-            # SCAN LINE B (Perluas dari Kolom 12 s/d 20)
-            # Area ini mencakup Finish Product B sampai ujung
-            res_b = scan_row_segment(idx_start, 12, 21)
+            # SCAN ZONA KANAN (LINE B) -> Kolom 11 s/d 20
+            res_b = find_product(rows_to_scan, 11, 21)
             if res_b != "-": produk_b = res_b
             
     except Exception as e:
@@ -114,14 +116,13 @@ try:
         "Remarks"               # 16
     ]
     
-    # Rapikan Kolom (Potong/Tambah sesuai kebutuhan)
     df = df.iloc[:, :len(nama_kolom)]
     if len(df.columns) < len(nama_kolom):
         for i in range(len(nama_kolom) - len(df.columns)):
             df[f"Col_{i}"] = np.nan
     df.columns = nama_kolom[:len(df.columns)]
     
-    # D. BERSIHKAN ANGKA (DENGAN HATI-HATI)
+    # D. BERSIHKAN ANGKA
     target_angka = [
         "RM Rotary Moist A", "Rotary Moist A", 
         "RM Rotary Moist B", "Rotary Moist B", 
@@ -132,7 +133,6 @@ try:
     df_angka = df.copy()
     for col in target_angka:
         if col in df_angka.columns:
-            # Ganti koma -> titik. Hapus yang bukan angka.
             df_angka[col] = df_angka[col].astype(str).str.replace(',', '.', regex=False)
             df_angka[col] = pd.to_numeric(df_angka[col], errors='coerce')
 
@@ -140,18 +140,13 @@ try:
     def hitung_tonnage(series_data):
         total = 0
         try:
-            # Filter data yang valid (bukan strip/kosong)
             data_valid = series_data[~series_data.isin(["-", "", "nan", "None", " "])].dropna()
-            
             if not data_valid.empty:
                 last_val = str(data_valid.iloc[-1])
-                # Jika format "41-47", ambil 47
                 if "-" in last_val:
                     parts = last_val.split("-")
-                    # Pastikan bagian setelah strip adalah angka
                     if parts[-1].strip().replace('.','').isdigit():
                          total = float(parts[-1])
-                # Jika angka biasa
                 elif last_val.replace('.','').isdigit():
                     total = float(last_val)
         except:
@@ -169,31 +164,24 @@ try:
     if not df.empty:
         st.success(f"✅ Data Tanggal {pilihan_sheet} Berhasil Ditarik!")
         
-        # --- INFO PRODUK ---
         st.markdown("### 🏷️ Informasi Batch Produksi")
-        
         col_info_1, col_info_2 = st.columns(2)
         
-        # CSS Styling (Kotak Biru & Merah Modern)
         st.markdown("""
         <style>
         .box-info { 
-            padding: 20px; 
-            border-radius: 12px; 
-            color: white; 
-            text-align: center; 
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1); 
-            margin-bottom: 20px;
+            padding: 20px; border-radius: 12px; color: white; text-align: center; 
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 20px;
         }
         .biru { background: linear-gradient(135deg, #3498db, #2980b9); }
         .merah { background: linear-gradient(135deg, #e74c3c, #c0392b); }
         .judul { font-size: 14px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; opacity: 0.9; }
-        .isi { font-size: 26px; font-weight: 800; margin-top: 5px; text-shadow: 1px 1px 2px rgba(0,0,0,0.2); }
+        .isi { font-size: 26px; font-weight: 800; margin-top: 5px; }
         </style>
         """, unsafe_allow_html=True)
 
         with col_info_1:
-            txt_a = produk_a if produk_a not in ["-", ""] else "(Kosong)"
+            txt_a = produk_a if produk_a not in ["-", ""] else "(Belum Diisi)"
             st.markdown(f"""
             <div class="box-info biru">
                 <div class="judul">JENIS PRODUK A (KIRI)</div>
@@ -212,10 +200,9 @@ try:
         
         st.divider()
 
-        # --- ROTARY PROCESS ---
+        # --- ROTARY & FINISH (SAMA SEPERTI SEBELUMNYA) ---
         st.subheader("🔥 Rotary Process (Gabungan A & B)")
         
-        # Hitung rata-rata hanya dari data yang ada angkanya
         gabungan_rm = pd.concat([df_angka["RM Rotary Moist A"], df_angka["RM Rotary Moist B"]])
         gabungan_rot = pd.concat([df_angka["Rotary Moist A"], df_angka["Rotary Moist B"]])
         
@@ -226,12 +213,9 @@ try:
         
         st.markdown("---")
 
-        # --- FINISH PRODUCT ---
         col_a, col_b = st.columns(2)
-        
         with col_a:
             st.markdown(f"#### 🅰️ LINE A")
-            # Cek apakah kolom A kosong semua
             if df_angka['Finish Moist A'].isnull().all():
                  st.info("Menunggu data masuk...")
             else:
@@ -259,5 +243,3 @@ try:
 
 except Exception as e:
     st.error("Sedang memuat data...")
-
-
