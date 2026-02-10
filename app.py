@@ -8,13 +8,13 @@ import re
 # ==========================================
 DAFTAR_FILE = {
     "Januari 2026": "1MQsvhmWmrGNtp3Txh07Z-88VfgEZTj_WBD5zLNs9GGY",  
-    "Februari 2026": "MASUKKAN_ID_SHEET_FEBRUARI_DISINI",             
+    "Februari 2026": "12ZVOHJf4pFImwP6W1iLZgBe56RvN1Q3a3BnKWcJeOys",             
     "Maret 2026": "MASUKKAN_ID_SHEET_MARET_DISINI",                   
 }
 
 st.set_page_config(page_title="Monitoring Produksi", layout="wide")
 st.title("🏭 Monitoring Produksi Live")
-st.caption("Created : Mahesya | Auto-Anchor System") 
+st.caption("Created : Mahesya") 
 
 # ==========================================
 # 1. MENU SAMPING
@@ -121,7 +121,7 @@ try:
     # D. PENCARIAN FORMULA (SAPU JAGAT)
     # ==========================================
     f_bbku = "-"
-    f_bakar = "-"
+    f_bakar = "PELLET"
     f_loading = "-"
     
     # Scan seluruh dataframe di area bawah (Baris 25 ke bawah)
@@ -288,3 +288,4 @@ try:
 
 except Exception as e:
     st.error(f"Error: {str(e)}")
+
