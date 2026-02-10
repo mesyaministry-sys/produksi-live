@@ -30,18 +30,18 @@ with st.sidebar:
 url = f'https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={pilihan_sheet}'
 
 try:
-    # A. BACA DATA RAW (MODE AMAN)
+    # A. BACA DATA RAW (MODE SUPER TEXT)
     df_raw = pd.read_csv(url, header=None, dtype=str, keep_default_na=False)
 
     # ==========================================
-    # B. SPIDER WEB SCAN (DENGAN PEMBATAS) 🕸️
+    # B. SMART SEARCH (LOGIKA PRIORITAS) 🏆
     # ==========================================
     produk_a = "-"
     produk_b = "-"
     idx_start = 6 
 
     try:
-        # 1. Cari titik pusat: Baris "9:00"
+        # 1. Cari baris "9:00"
         scan_area = df_raw.iloc[:25, 0].astype(str)
         matches = scan_area[scan_area.str.contains(r"9[:\.]00", regex=True)].index
         
@@ -49,44 +49,56 @@ try:
             idx_center = matches[0]
             idx_start = idx_center 
             
-            # BLACKLIST (TAMBAH NAMA CHECKER)
+            # DAFTAR BLACKLIST (PERLUAS DENGAN NAMA ORANG)
             blacklist = ["nan", "none", "-", "", "moisture", "particle", "mesh", "null", 
                          "time", "tonnage", "paraph", "checker", "ok", "no", "shift", 
-                         "max", "min", "avg", "phadla", "reza", "qc", "admin"]
+                         "max", "min", "avg", "phadla", "reza", "qc", "admin", "spv", "leader"]
             
-            # FUNGSI PENCARI
-            def find_product(row_indices, col_start, col_end):
+            # FUNGSI PEMILIH CERDAS
+            def get_best_candidate(row_indices, col_start, col_end):
                 candidates = []
+                
+                # 1. KUMPULKAN SEMUA TEKS KANDIDAT
                 for r in row_indices:
                     if r < 0 or r >= len(df_raw): continue
-                    
-                    # Ambil data horizontal
                     vals = df_raw.iloc[r, col_start:col_end].values.flatten()
                     for v in vals:
                         v_clean = str(v).strip()
-                        # Syarat: Panjang > 1 dan Bukan Sampah
+                        # Hanya ambil teks yang cukup panjang dan bukan blacklist
                         if len(v_clean) > 1 and v_clean.lower() not in blacklist:
-                            # Harus ada HURUF (A-Z)
+                            # Harus ada huruf (menghindari angka murni seperti 11.36)
                             if re.search('[a-zA-Z]', v_clean):
                                 candidates.append(v_clean)
                 
-                if candidates:
-                    return candidates[0]
-                return "-"
+                if not candidates:
+                    return "-"
+                
+                # 2. SELEKSI JUARA (PRIORITAS)
+                
+                # Juara 1: Mengandung ANGKA (Contoh: "Z 125", "211")
+                # Ini membedakan Produk vs Nama Orang (Phadla gak ada angkanya)
+                for c in candidates:
+                    if re.search(r'\d', c): 
+                        return c
+                
+                # Juara 2: Mengandung kata "PRODUCT" atau "HOLD"
+                for c in candidates:
+                    if "PRODUCT" in c.upper() or "HOLD" in c.upper():
+                        return c
+
+                # Juara 3: Ambil kandidat pertama yang tersisa
+                return candidates[0]
 
             # AREA JARINGAN (Cek baris Pusat, Atas, Bawah)
             rows_to_scan = [idx_center, idx_center-1, idx_center+1]
             
-            # --- KOREKSI AREA SCAN (SEMPITKAN!) ---
-            
-            # SCAN LINE A: Kolom 6 s/d 10 (G, H, I, J). 
-            # Kolom 10 (K) adalah Paraf PHADLA -> JANGAN DIAMBIL!
-            res_a = find_product(rows_to_scan, 6, 10)
+            # SCAN LINE A (Perlebar ke kanan sampai kol 11 untuk jaga-jaga)
+            # Logika Prioritas akan membuang "PHADLA" karena tidak ada angkanya
+            res_a = get_best_candidate(rows_to_scan, 6, 11)
             if res_a != "-": produk_a = res_a
 
-            # SCAN LINE B: Kolom 11 s/d 15 (L, M, N, O).
-            # Kolom 15 (P) adalah Paraf -> JANGAN DIAMBIL!
-            res_b = find_product(rows_to_scan, 11, 15)
+            # SCAN LINE B (Kolom 11 s/d 18)
+            res_b = get_best_candidate(rows_to_scan, 11, 18)
             if res_b != "-": produk_b = res_b
             
     except Exception as e:
