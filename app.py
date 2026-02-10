@@ -136,7 +136,6 @@ try:
     # E. DATA ANGKA
     # ==========================================
     idx_data_start = idx_900
-    # Cek mundur, apakah jam 8:00 ada?
     if "8" in str(df_raw.iloc[idx_900-1, 0]):
         idx_data_start = idx_900 - 1
         
@@ -144,7 +143,7 @@ try:
     
     df_clean = pd.DataFrame()
     
-    # MAPPING KOLOM (Sesuai Gambar 28.jpg)
+    # MAPPING KOLOM
     df_clean["Jam"]               = df.iloc[:, 0] 
     
     df_clean["RM Rotary Moist A"] = df.iloc[:, 1]
@@ -255,7 +254,7 @@ try:
             st.metric("Produksi Line B", f"{total_ton_b:.0f} TON")
 
         # ==========================================
-        # 📈 FITUR GRAFIK (BARU)
+        # 📈 FITUR 3 GRAFIK LENGKAP
         # ==========================================
         st.markdown("---")
         st.subheader("📈 Grafik Tren Harian")
@@ -263,17 +262,26 @@ try:
         # Persiapan Data: Buang baris yang jam-nya kosong
         chart_data = df_clean.dropna(subset=["Jam"]).copy()
 
-        # GRAFIK 1: ROTARY MOISTURE (Line A vs B)
-        st.caption("Tren RM Rotary Moisture (%)")
+        # GRAFIK 1: RM ROTARY MOISTURE (Line A vs B)
+        st.caption("1. Tren RM Rotary Moist (Input)")
         st.line_chart(
             chart_data,
             x="Jam",
             y=["RM Rotary Moist A", "RM Rotary Moist B"],
             color=["#3498db", "#e74c3c"] # Biru vs Merah
         )
+        
+        # GRAFIK 2: ROTARY MOISTURE (PROCESS) - INI YANG BARU DITAMBAHKAN
+        st.caption("2. Tren Rotary Moist (Process)")
+        st.line_chart(
+            chart_data,
+            x="Jam",
+            y=["Rotary Moist A", "Rotary Moist B"],
+            color=["#9b59b6", "#34495e"] # Ungu vs Abu Gelap (Biar Beda Warna)
+        )
 
-        # GRAFIK 2: FINISH PRODUCT MOISTURE
-        st.caption("Tren Finish Product Moisture (%)")
+        # GRAFIK 3: FINISH PRODUCT MOISTURE
+        st.caption("3. Tren Finish Product Moist (Output)")
         st.line_chart(
             chart_data,
             x="Jam",
