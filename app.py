@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import re
+import time # Library untuk waktu (auto refresh)
 
 # ==========================================
 # ⚙️ KONFIGURASI DATABASE BULANAN
@@ -14,7 +15,7 @@ DAFTAR_FILE = {
 
 st.set_page_config(page_title="Monitoring Produksi", layout="wide")
 st.title("🏭 Monitoring Produksi Live")
-st.caption("Created & Developer : Mahesya | 2026") 
+st.caption("Created & Developer : Mahesya | 2026 | QC System Active 🚦") 
 
 # ==========================================
 # 1. MENU SAMPING
@@ -30,8 +31,17 @@ with st.sidebar:
     st.subheader("📅 Periode Harian")
     pilihan_sheet = st.selectbox("Pilih Tanggal (Sheet):", daftar_tanggal, index=9) 
     
-    if st.button("🔄 Refresh Data"):
+    # FITUR AUTO REFRESH
+    auto_refresh = st.checkbox("🔄 Auto Refresh (60s)", value=False)
+    
+    if st.button("🔄 Refresh Manual"):
         st.cache_data.clear()
+        st.rerun()
+
+    if auto_refresh:
+        time.sleep(60) # Tunggu 60 detik
+        st.cache_data.clear()
+        st.rerun()
 
 # ==========================================
 # 2. PROSES DATA
@@ -52,7 +62,6 @@ try:
     idx_900 = 6 
     found_anchor = False
 
-    # Scan Kolom A untuk cari "9:00"
     scan_col = df_raw.iloc[:30, 0].astype(str)
     matches = scan_col[scan_col.str.contains(r"9[:\.]00", regex=True)].index
     
@@ -64,103 +73,75 @@ try:
         st.stop()
 
     # ==========================================
-    # C. CARI PRODUK (SCANNER NAIK KE ATAS)
+    # C. CARI PRODUK & FORMULA
     # ==========================================
-    produk_a = "-"
-    produk_b = "-"
+    produk_a, produk_b = "-", "-"
+    f_bbku, f_bakar, f_loading = "-", "-", "-"
 
     def valid_prod(val):
         t = str(val).strip()
         if len(t) < 2: return False
-        # Tolak Angka & Range
         if t.replace('.','').replace(',','').isdigit(): return False 
         if re.match(r'^\d+-\d+$', t): return False
-        # Tolak Header
         if any(x in t.lower() for x in ["moisture", "particle", "mesh", "max", "min", "tonnage", "time"]): return False
         return True
 
-    # --- CARI PRODUK A (KOLOM J / Index 9) ---
+    # Produk A
     for r in range(idx_900, max(0, idx_900-4), -1):
         for c in [8, 9, 10]:
             val = df_raw.iloc[r, c]
             if valid_prod(val):
                 if any(char.isdigit() for char in str(val)):
-                    produk_a = str(val).strip()
-                    break
+                    produk_a = str(val).strip(); break
         if produk_a != "-": break
 
-    # --- CARI PRODUK B (KOLOM O / Index 14) ---
+    # Produk B
     for r in range(idx_900, max(0, idx_900-4), -1):
         for c in [13, 14, 15]:
             val = df_raw.iloc[r, c]
             if valid_prod(val):
                 if str(val).isupper():
-                    produk_b = str(val).strip()
-                    break
+                    produk_b = str(val).strip(); break
         if produk_b != "-": break
 
     if produk_a == "-": produk_a = "(Belum Diisi)"
     if produk_b == "-": produk_b = "(Kosong)"
 
-    # ==========================================
-    # D. CARI FORMULA (SCANNER BAWAH)
-    # ==========================================
-    f_bbku = "-"
-    f_bakar = "-"
-    f_loading = "-"
-    
-    # Scan Baris 25 s/d 60
+    # Formula
     for i in range(25, min(60, len(df_raw))):
-        row_txt = " ".join(df_raw.iloc[i].astype(str).values).upper()
-        row_txt = row_txt.replace("_", " ").replace("  ", " ")
-        
-        if "BBKU" in row_txt and ":" in row_txt:
-            raw = row_txt.split(":")[-1].strip()
-            f_bbku = raw.split("FORMULA")[0].strip()
-            
-        if "BAHAN BAKAR" in row_txt and ":" in row_txt:
-            raw = row_txt.split(":")[-1].strip()
-            f_bakar = raw.split("LOADING")[0].strip()
-            
-        if "LOADING" in row_txt and ":" in row_txt:
-            f_loading = row_txt.split(":")[-1].strip()
+        row_txt = " ".join(df_raw.iloc[i].astype(str).values).upper().replace("_", " ").replace("  ", " ")
+        if "BBKU" in row_txt and ":" in row_txt: f_bbku = row_txt.split(":")[-1].split("FORMULA")[0].strip()
+        if "BAHAN BAKAR" in row_txt and ":" in row_txt: f_bakar = row_txt.split(":")[-1].split("LOADING")[0].strip()
+        if "LOADING" in row_txt and ":" in row_txt: f_loading = row_txt.split(":")[-1].strip()
 
-    for x in [f_bbku, f_bakar, f_loading]:
-        x = x.replace("NAN", "").replace(",", "").strip()
-    
-    if len(f_bbku) < 2: f_bbku = "-"
-    if len(f_bakar) < 2: f_bakar = "-"
-    if len(f_loading) < 2: f_loading = "-"
+    for x in [f_bbku, f_bakar, f_loading]: x = x.replace("NAN", "").replace(",", "").strip()
+    if len(f_bbku)<2: f_bbku="-"; 
+    if len(f_bakar)<2: f_bakar="-"; 
+    if len(f_loading)<2: f_loading="-"
 
     # ==========================================
-    # E. DATA ANGKA
+    # D. DATA ANGKA
     # ==========================================
     idx_data_start = idx_900
-    if "8" in str(df_raw.iloc[idx_900-1, 0]):
-        idx_data_start = idx_900 - 1
+    if "8" in str(df_raw.iloc[idx_900-1, 0]): idx_data_start = idx_900 - 1
         
     df = df_raw.iloc[idx_data_start:].copy()
-    
     df_clean = pd.DataFrame()
     
-    # MAPPING KOLOM
+    # Mapping
     df_clean["Jam"]               = df.iloc[:, 0] 
-    
     df_clean["RM Rotary Moist A"] = df.iloc[:, 1]
     df_clean["Rotary Moist A"]    = df.iloc[:, 2]
-    
     df_clean["RM Rotary Moist B"] = df.iloc[:, 4]
     df_clean["Rotary Moist B"]    = df.iloc[:, 5]
-    
     df_clean["Finish Moist A"]    = df.iloc[:, 7]
     df_clean["Finish Particle A"] = df.iloc[:, 8]
     df_clean["Tonnage A"]         = df.iloc[:, 9]
-    
     df_clean["Finish Moist B"]    = df.iloc[:, 12]
     df_clean["Finish Particle B"] = df.iloc[:, 13]
     df_clean["Tonnage B"]         = df.iloc[:, 14]
 
-    # Bersihkan Angka
+    # Cleaning Angka
     cols_angka = ["RM Rotary Moist A", "Rotary Moist A", "RM Rotary Moist B", "Rotary Moist B", 
                   "Finish Moist A", "Finish Particle A", "Finish Moist B", "Finish Particle B"]
     
@@ -189,14 +170,13 @@ try:
     total_gabungan = total_ton_a + total_ton_b
 
     # ==========================================
-    # F. TAMPILAN DASHBOARD
+    # E. TAMPILAN DASHBOARD
     # ==========================================
     if not df_clean.empty:
         st.success(f"✅ Laporan: **{pilihan_bulan}** | Tanggal: **{pilihan_sheet}**")
         
-        st.markdown("### 🏷️ Informasi Batch Produksi")
+        # --- INFO ---
         col_info_1, col_info_2 = st.columns(2)
-        
         st.markdown("""
         <style>
         .card { padding: 20px; border-radius: 12px; text-align: center; margin-bottom: 10px; color: white; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
@@ -209,10 +189,8 @@ try:
         </style>
         """, unsafe_allow_html=True)
 
-        with col_info_1:
-            st.markdown(f'<div class="card bg-blue"><div class="label">JENIS PRODUK A (KIRI)</div><div class="value">{produk_a}</div></div>', unsafe_allow_html=True)
-        with col_info_2:
-            st.markdown(f'<div class="card bg-red"><div class="label">JENIS PRODUK B (KANAN)</div><div class="value">{produk_b}</div></div>', unsafe_allow_html=True)
+        with col_info_1: st.markdown(f'<div class="card bg-blue"><div class="label">JENIS PRODUK A (KIRI)</div><div class="value">{produk_a}</div></div>', unsafe_allow_html=True)
+        with col_info_2: st.markdown(f'<div class="card bg-red"><div class="label">JENIS PRODUK B (KANAN)</div><div class="value">{produk_b}</div></div>', unsafe_allow_html=True)
         
         c1, c2, c3 = st.columns(3)
         with c1: st.markdown(f'<div class="bg-dark" style="text-align:center;"><div class="label">FORMULA BBKU</div><div class="value-small">{f_bbku}</div></div>', unsafe_allow_html=True)
@@ -221,7 +199,7 @@ try:
 
         st.divider()
         
-        # --- METRIK ANGKA ---
+        # --- METRIK ---
         rm_a = df_clean[df_clean["RM Rotary Moist A"] > 0]["RM Rotary Moist A"]
         rm_b = df_clean[df_clean["RM Rotary Moist B"] > 0]["RM Rotary Moist B"]
         avg_rm = pd.concat([rm_a, rm_b]).mean()
@@ -237,7 +215,7 @@ try:
         
         st.markdown("---")
 
-        # --- DETAIL PER LINE ---
+        # --- DETAIL LINE ---
         ca, cb = st.columns(2)
         with ca:
             st.markdown(f"#### 🅰️ LINE A")
@@ -253,45 +231,54 @@ try:
             c4.metric("Particle B", f"{df_clean['Finish Particle B'].mean():.2f}")
             st.metric("Produksi Line B", f"{total_ton_b:.0f} TON")
 
-        # ==========================================
-        # 📈 FITUR 3 GRAFIK LENGKAP
-        # ==========================================
+        # --- GRAFIK ---
         st.markdown("---")
         st.subheader("📈 Grafik Tren Harian")
-
-        # Persiapan Data: Buang baris yang jam-nya kosong
         chart_data = df_clean.dropna(subset=["Jam"]).copy()
 
-        # GRAFIK 1: RM ROTARY MOISTURE (Line A vs B)
         st.caption("1. Tren RM Rotary Moist (Input)")
-        st.line_chart(
-            chart_data,
-            x="Jam",
-            y=["RM Rotary Moist A", "RM Rotary Moist B"],
-            color=["#3498db", "#e74c3c"] # Biru vs Merah
-        )
-        
-        # GRAFIK 2: ROTARY MOISTURE (PROCESS) - INI YANG BARU DITAMBAHKAN
+        st.line_chart(chart_data, x="Jam", y=["RM Rotary Moist A", "RM Rotary Moist B"], color=["#3498db", "#e74c3c"])
         st.caption("2. Tren Rotary Moist (Process)")
-        st.line_chart(
-            chart_data,
-            x="Jam",
-            y=["Rotary Moist A", "Rotary Moist B"],
-            color=["#9b59b6", "#34495e"] # Ungu vs Abu Gelap (Biar Beda Warna)
-        )
-
-        # GRAFIK 3: FINISH PRODUCT MOISTURE
+        st.line_chart(chart_data, x="Jam", y=["Rotary Moist A", "Rotary Moist B"], color=["#9b59b6", "#34495e"])
         st.caption("3. Tren Finish Product Moist (Output)")
-        st.line_chart(
-            chart_data,
-            x="Jam",
-            y=["Finish Moist A", "Finish Moist B"],
-            color=["#2ecc71", "#f1c40f"] # Hijau vs Kuning
-        )
+        st.line_chart(chart_data, x="Jam", y=["Finish Moist A", "Finish Moist B"], color=["#2ecc71", "#f1c40f"])
         
         st.divider()
-        with st.expander("🔍 Lihat Tabel Data Mentah"):
-            st.dataframe(df_clean, use_container_width=True)
+        
+        # --- DOWNLOAD & TABEL (DENGAN TRAFFIC LIGHT 🚦) ---
+        csv = df_clean.to_csv(index=False).encode('utf-8')
+        st.download_button(
+            label="📥 Download Data Harian (CSV)",
+            data=csv,
+            file_name=f'laporan_produksi_{pilihan_bulan}_{pilihan_sheet}.csv',
+            mime='text/csv',
+        )
+
+        st.subheader("🔍 Quality Control Data Check")
+        
+        # DEFINISI WARNA PERINGATAN
+        def style_dataframe(row):
+            styles = [''] * len(row)
+            # Logika Peringatan (Contoh: Moisture Finish > 15% jadi MERAH)
+            
+            # Cek Finish Moist A (Kolom ke-7 jika urutan sesuai df_clean)
+            val_a = row["Finish Moist A"]
+            if pd.notnull(val_a) and isinstance(val_a, (int, float)) and val_a > 15:
+                # Cari index kolom Finish Moist A
+                idx = df_clean.columns.get_loc("Finish Moist A")
+                styles[idx] = 'background-color: #ffcccc; color: red; font-weight: bold;'
+                
+            # Cek Finish Moist B
+            val_b = row["Finish Moist B"]
+            if pd.notnull(val_b) and isinstance(val_b, (int, float)) and val_b > 15:
+                idx = df_clean.columns.get_loc("Finish Moist B")
+                styles[idx] = 'background-color: #ffcccc; color: red; font-weight: bold;'
+
+            return styles
+
+        # Tampilkan tabel dengan styling (Pandas Styler)
+        st.dataframe(df_clean.style.apply(style_dataframe, axis=1), use_container_width=True)
+
     else:
         st.warning("Data kosong.")
 
