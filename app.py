@@ -34,7 +34,7 @@ try:
     df_raw = pd.read_csv(url, header=None)
 
     # ==========================================
-    # B. SMART SEARCH (SCANNER MELEBAR) 📡
+    # B. SMART SEARCH (SCANNER DIPERLUAS) 📡
     # ==========================================
     produk_a = "-"
     produk_b = "-"
@@ -48,9 +48,9 @@ try:
         if not matches.empty:
             idx_start = matches[0] # Ini nomor baris yang BENAR
             
-            # FUNGSI PENCARI PINTAR (Mencari di rentang kolom)
+            # FUNGSI PENCARI PINTAR
             def scan_range(row_idx, col_start, col_end):
-                # Ambil data dari beberapa kolom sekaligus
+                # Ambil data dari rentang kolom
                 vals = df_raw.iloc[row_idx, col_start:col_end].astype(str)
                 found = []
                 for v in vals:
@@ -63,25 +63,27 @@ try:
                 for f in found:
                     if re.search('[a-zA-Z]', f):
                         return f
-                # CADANGAN: Kalau tidak ada huruf, ambil angka pun boleh (misal "125")
+                # CADANGAN: Kalau tidak ada huruf, ambil angka pun boleh
                 if found:
                     return found[0]
                 return "-"
 
-            # SCAN LINE A: Cek kolom 7, 8, 9, 10 (Moisture s/d Tonnage)
-            # Area sapuan kita perlebar agar Z 125 pasti kena
-            res_a = scan_range(idx_start, 7, 11)
+            # SCAN LINE A: 
+            # KOREKSI: Kita mulai dari Kolom 6 (G) sampai 10 (K)
+            # Sebelumnya mulai dari 7, makanya Z 125 (di G) terlewat.
+            res_a = scan_range(idx_start, 6, 11)
             if res_a != "-": produk_a = res_a
 
-            # SCAN LINE B: Cek kolom 12, 13, 14, 15
-            res_b = scan_range(idx_start, 12, 16)
+            # SCAN LINE B: 
+            # Kita mulai dari Kolom 11 (L) sampai 16
+            res_b = scan_range(idx_start, 11, 16)
             if res_b != "-": produk_b = res_b
             
     except Exception as e:
         pass
 
     # ==========================================
-    # C. OLAH DATA TABEL (TETAP SAMA)
+    # C. OLAH DATA TABEL
     # ==========================================
     
     # Ambil data mulai dari baris jam 9:00
@@ -171,7 +173,7 @@ try:
         """, unsafe_allow_html=True)
 
         with col_info_1:
-            val_a_display = produk_a if produk_a not in ["-", "nan"] else "(kosong)"
+            val_a_display = produk_a if produk_a not in ["-", "nan"] else "(Belum Diisi)"
             st.markdown(f"""
             <div class="box-info biru">
                 <div class="judul">JENIS PRODUK A (KIRI)</div>
@@ -235,4 +237,3 @@ try:
 
 except Exception as e:
     st.error("Sedang memuat data...")
-
