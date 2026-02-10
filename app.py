@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import re
 
 # ==========================================
 # ⚙️ KONFIGURASI
@@ -19,7 +18,6 @@ daftar_tanggal = [str(i) for i in range(1, 32)]
 
 with st.sidebar:
     st.header("📅 Pilih Periode")
-    # Default pilih tanggal 10
     pilihan_sheet = st.selectbox("Pilih Tanggal (Sheet):", daftar_tanggal, index=9) 
     
     if st.button("🔄 Refresh Data"):
@@ -32,127 +30,54 @@ url = f'https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sh
 
 try:
     # A. BACA DATA RAW
-    # dtype=str menjaga agar "Z 125" tidak rusak
-    df_raw = pd.read_csv(url, header=None, dtype=str, keep_default_na=False)
+    df_raw = pd.read_csv(url, header=None)
 
     # ==========================================
-    # 🚨 VALIDASI TANGGAL (ANTI-DATA NYASAR) 🚨
+    # B. SMART SEARCH (CARI POSISI JAM 9:00) 🕵️‍♂️
     # ==========================================
-    # Logika: Kita cari cell berisi "Date" di 5 baris pertama.
-    # Lalu kita ambil tanggalnya. Jika beda dengan pilihan user -> BLOKIR.
+    # Daripada menebak index baris (yang sering geser), kita cari baris "9:00" secara otomatis.
     
-    tanggal_valid = False
-    tanggal_terbaca = "Tidak Terbaca"
-    
-    try:
-        # Scan 5 baris pertama di Kolom A
-        header_area = df_raw.iloc[:5, 0].astype(str).values.flatten()
-        for cell in header_area:
-            if "date" in cell.lower() or "tanggal" in cell.lower():
-                # Ambil angka dari teks (misal "Date : 6-Jan" -> diambil "6")
-                angka = re.findall(r'\d+', cell)
-                if angka:
-                    tanggal_terbaca = angka[0]
-                    # Cek apakah sama dengan pilihan user?
-                    if int(tanggal_terbaca) == int(pilihan_sheet):
-                        tanggal_valid = True
-                    break
-    except:
-        pass
-
-    # HAKIM: Jika tanggal terbaca TAPI beda dengan pilihan user -> STOP
-    if tanggal_terbaca != "Tidak Terbaca" and not tanggal_valid:
-        st.error("⛔ DATA TIDAK SESUAI / SHEET TIDAK ADA")
-        st.warning(f"Anda memilih Tanggal **{pilihan_sheet}**, tetapi sistem mendeteksi file ini adalah data Tanggal **{tanggal_terbaca}**.")
-        st.info("Ini terjadi karena Sheet untuk tanggal yang Anda pilih BELUM ADA di Excel, sehingga Google mengirimkan sheet lain.")
-        st.stop() # PROGRAM BERHENTI DISINI
-
-    # ==========================================
-    # B. SMART SEARCH (FILTER NAMA & SPESIFIKASI) 🏆
-    # ==========================================
+    # Default nilai jika tidak ketemu
     produk_a = "-"
     produk_b = "-"
-    idx_start = 6 
+    idx_start = 6 # Fallback index
 
     try:
-        # 1. Cari baris "9:00"
-        scan_area = df_raw.iloc[:25, 0].astype(str)
-        matches = scan_area[scan_area.str.contains(r"9[:\.]00", regex=True)].index
+        # Cari baris dimana Kolom 0 berisi teks "9:00"
+        # Kita scan 15 baris pertama saja biar cepat
+        scan_area = df_raw.iloc[:15, 0].astype(str)
+        matches = scan_area[scan_area.str.contains("9:00", na=False)].index
         
         if not matches.empty:
-            idx_center = matches[0]
-            idx_start = idx_center 
+            idx_start = matches[0] # Ketemu! Ini nomor baris yang benar (misal: 6)
             
-            # BLACKLIST: Kata-kata yang HARUS DIBUANG
-            blacklist = ["nan", "none", "-", "", "moisture", "particle", "mesh", "null", 
-                         "time", "tonnage", "paraph", "checker", "ok", "no", "shift", 
-                         "max", "min", "avg", "phadla", "reza", "qc", "admin", "juan", "dian", "%"]
+            # AMBIL PRODUK LINE A (Disebelah kanan jam 9:00)
+            # Biasanya di Kolom I (Index 8). Kalau kosong, cek H (7).
+            val_a = str(df_raw.iloc[idx_start, 8]) 
+            if val_a == "nan" or val_a == "-" or val_a == "None":
+                 val_a = str(df_raw.iloc[idx_start, 7]) # Cek kolom sebelahnya
             
-            def get_best_candidate(row_indices, col_start, col_end):
-                candidates = []
-                for r in row_indices:
-                    if r < 0 or r >= len(df_raw): continue
-                    
-                    # Ambil data horizontal
-                    vals = df_raw.iloc[r, col_start:col_end].values.flatten()
-                    for v in vals:
-                        v_clean = str(v).strip()
-                        v_lower = v_clean.lower()
-                        
-                        # FILTER 1: Panjang min 2 huruf & Tidak masuk blacklist
-                        if len(v_clean) > 1:
-                            is_blacklisted = False
-                            for bad in blacklist:
-                                if bad in v_lower:
-                                    is_blacklisted = True; break
-                            
-                            if not is_blacklisted:
-                                # FILTER 2: Harus ada HURUF (A-Z)
-                                if re.search('[a-zA-Z]', v_clean):
-                                    # FILTER 3 (Anti Nama Orang): 
-                                    # Jika formatnya Title Case (Juan) dan TANPA ANGKA -> Buang
-                                    # Produk biasanya UPPERCASE (PRODUCT) atau Ada Angka (Z 125)
-                                    is_title_case = v_clean[0].isupper() and v_clean[1:].islower()
-                                    has_digit = bool(re.search(r'\d', v_clean))
-                                    
-                                    if not (is_title_case and not has_digit):
-                                        candidates.append(v_clean)
-                
-                if not candidates: return "-"
-                
-                # PRIORITAS JUARA
-                # 1. Mengandung ANGKA (Z 125)
-                for c in candidates:
-                    if re.search(r'\d', c): return c
-                
-                # 2. Mengandung kata PRODUCT/HOLD
-                for c in candidates:
-                    if "PRODUCT" in c.upper() or "HOLD" in c.upper(): return c
-                
-                # 3. Uppercase semua (PHADLA biasanya kena filter kolom, jadi aman)
-                for c in candidates:
-                    if c.isupper(): return c
+            if val_a != "nan" and val_a != "-":
+                 produk_a = val_a
 
-                return candidates[0]
-
-            rows_to_scan = [idx_center, idx_center-1, idx_center+1]
+            # AMBIL PRODUK LINE B (Disebelah kanan jauh)
+            # Biasanya di Kolom M (Index 12).
+            val_b = str(df_raw.iloc[idx_start, 12])
+            if val_b == "nan" or val_b == "-" or val_b == "None":
+                 val_b = str(df_raw.iloc[idx_start, 13])
             
-            # SCAN LINE A (Kolom 6 s/d 10) -> Stop sebelum Kolom K (Checker)
-            res_a = get_best_candidate(rows_to_scan, 6, 11)
-            if res_a != "-": produk_a = res_a
-
-            # SCAN LINE B (Kolom 11 s/d 16) -> Stop sebelum Kolom P (Checker)
-            res_b = get_best_candidate(rows_to_scan, 11, 17)
-            if res_b != "-": produk_b = res_b
-            
-    except Exception as e:
+            if val_b != "nan" and val_b != "-":
+                 produk_b = val_b
+    except:
         pass
 
     # ==========================================
     # C. OLAH DATA TABEL
     # ==========================================
     
-    df = df_raw.iloc[idx_start:].copy() 
+    # Potong data mulai dari baris "9:00" tadi (minus 1 baris buat header dummy)
+    # Tapi mapping kolom kita tetap pakai logika fixed agar rapi
+    df = df_raw.iloc[idx_start:].copy() # Ambil dari jam 9 kebawah
 
     nama_kolom = [
         "Jam Rotary A",         # 0
@@ -174,13 +99,16 @@ try:
         "Remarks"               # 16
     ]
     
+    # Ambil 17 kolom & Rapikan
     df = df.iloc[:, :len(nama_kolom)]
     if len(df.columns) < len(nama_kolom):
         for i in range(len(nama_kolom) - len(df.columns)):
             df[f"Col_{i}"] = np.nan
     df.columns = nama_kolom[:len(df.columns)]
     
+    # ==========================================
     # D. BERSIHKAN ANGKA
+    # ==========================================
     target_angka = [
         "RM Rotary Moist A", "Rotary Moist A", 
         "RM Rotary Moist B", "Rotary Moist B", 
@@ -198,13 +126,11 @@ try:
     def hitung_tonnage(series_data):
         total = 0
         try:
-            data_valid = series_data[~series_data.isin(["-", "", "nan", "None", " "])].dropna()
+            data_valid = series_data.dropna()
             if not data_valid.empty:
                 last_val = str(data_valid.iloc[-1])
                 if "-" in last_val:
-                    parts = last_val.split("-")
-                    if parts[-1].strip().replace('.','').isdigit():
-                         total = float(parts[-1])
+                    total = float(last_val.split("-")[-1])
                 elif last_val.replace('.','').isdigit():
                     total = float(last_val)
         except:
@@ -222,43 +148,43 @@ try:
     if not df.empty:
         st.success(f"✅ Data Tanggal {pilihan_sheet} Berhasil Ditarik!")
         
+        # --- INFO PRODUK (HASIL SMART SEARCH) ---
         st.markdown("### 🏷️ Informasi Batch Produksi")
+        
         col_info_1, col_info_2 = st.columns(2)
         
+        # Style Kotak Warna
         st.markdown("""
         <style>
-        .box-info { 
-            padding: 20px; border-radius: 12px; color: white; text-align: center; 
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 20px;
-        }
-        .biru { background: linear-gradient(135deg, #3498db, #2980b9); }
-        .merah { background: linear-gradient(135deg, #e74c3c, #c0392b); }
-        .judul { font-size: 14px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; opacity: 0.9; }
-        .isi { font-size: 26px; font-weight: 800; margin-top: 5px; }
+        .box-info { padding: 15px; border-radius: 8px; color: white; text-align: center; font-weight: bold; }
+        .biru { background-color: #3498db; }
+        .merah { background-color: #e74c3c; }
+        .judul { font-size: 14px; opacity: 0.9; margin-bottom: 5px; }
+        .isi { font-size: 24px; }
         </style>
         """, unsafe_allow_html=True)
 
         with col_info_1:
-            txt_a = produk_a if produk_a not in ["-", ""] else "(Belum Diisi)"
+            if produk_a == "-" or produk_a == "nan": produk_a = "(Belum Diisi)"
             st.markdown(f"""
             <div class="box-info biru">
-                <div class="judul">JENIS PRODUK A (KIRI)</div>
-                <div class="isi">{txt_a}</div>
+                <div class="judul">JENIS PRODUK LINE A (KIRI)</div>
+                <div class="isi">{produk_a}</div>
             </div>
             """, unsafe_allow_html=True)
             
         with col_info_2:
-            txt_b = produk_b if produk_b not in ["-", ""] else "(Kosong)"
+            if produk_b == "-" or produk_b == "nan": produk_b = "(Kosong)"
             st.markdown(f"""
             <div class="box-info merah">
-                <div class="judul">JENIS PRODUK B (KANAN)</div>
-                <div class="isi">{txt_b}</div>
+                <div class="judul">JENIS PRODUK LINE B (KANAN)</div>
+                <div class="isi">{produk_b}</div>
             </div>
             """, unsafe_allow_html=True)
         
         st.divider()
 
-        # --- ROTARY & FINISH ---
+        # --- ROTARY PROCESS ---
         st.subheader("🔥 Rotary Process (Gabungan A & B)")
         
         gabungan_rm = pd.concat([df_angka["RM Rotary Moist A"], df_angka["RM Rotary Moist B"]])
@@ -271,7 +197,9 @@ try:
         
         st.markdown("---")
 
+        # --- FINISH PRODUCT ---
         col_a, col_b = st.columns(2)
+        
         with col_a:
             st.markdown(f"#### 🅰️ LINE A")
             if df_angka['Finish Moist A'].isnull().all():
@@ -300,4 +228,4 @@ try:
         st.warning("Data kosong.")
 
 except Exception as e:
-    st.error("Sedang memuat data...")
+    st.error("Sedang memuat data... Jika lama, coba Refresh.")
