@@ -15,7 +15,7 @@ DAFTAR_FILE = {
 
 st.set_page_config(page_title="Monitoring Produksi", layout="wide")
 st.title("🏭 Monitoring Produksi Live")
-st.caption("Created & Developer : Mahesya | 2026 🚦") 
+st.caption("Created & Developer : Mahesya | 2026 | QC System Active 🚦") 
 
 # ==========================================
 # 1. MENU SAMPING
@@ -245,7 +245,7 @@ try:
         
         st.divider()
         
-        # --- DOWNLOAD & TABEL (DENGAN TRAFFIC LIGHT 🚦) ---
+        # --- DOWNLOAD & TABEL (TRAFFIC LIGHT) ---
         csv = df_clean.to_csv(index=False).encode('utf-8')
         st.download_button(
             label="📥 Download Data Harian (CSV)",
@@ -254,34 +254,45 @@ try:
             mime='text/csv',
         )
 
-        st.subheader("🔍 Quality Control Data Check")
+        st.subheader("🔍 Quality Control Data Check (🚦)")
         
-        # DEFINISI WARNA PERINGATAN
-        def style_dataframe(row):
+        # ==========================================
+        # 🚦 DEFINISI WARNA LAMPU QC
+        # ==========================================
+        def qc_highlight(row):
             styles = [''] * len(row)
-            # Logika Peringatan (Contoh: Moisture Finish > 15% jadi MERAH)
             
-            # Cek Finish Moist A (Kolom ke-7 jika urutan sesuai df_clean)
-            val_a = row["Finish Moist A"]
-            if pd.notnull(val_a) and isinstance(val_a, (int, float)) and val_a > 15:
-                # Cari index kolom Finish Moist A
-                idx = df_clean.columns.get_loc("Finish Moist A")
-                styles[idx] = 'background-color: #ffcccc; color: red; font-weight: bold;'
-                
-            # Cek Finish Moist B
-            val_b = row["Finish Moist B"]
-            if pd.notnull(val_b) and isinstance(val_b, (int, float)) and val_b > 15:
-                idx = df_clean.columns.get_loc("Finish Moist B")
-                styles[idx] = 'background-color: #ffcccc; color: red; font-weight: bold;'
+            # --- CEK LINE A ---
+            if pd.notnull(row["Finish Moist A"]):
+                val = row["Finish Moist A"]
+                # Cek Kolom Finish A
+                try:
+                    idx = df_clean.columns.get_loc("Finish Moist A")
+                    if val > 15: 
+                        styles[idx] = 'background-color: #ff4b4b; color: white; font-weight: bold;' # MERAH
+                    else: 
+                        styles[idx] = 'background-color: #2ecc71; color: black; font-weight: bold;' # HIJAU
+                except: pass
+
+            # --- CEK LINE B ---
+            if pd.notnull(row["Finish Moist B"]):
+                val = row["Finish Moist B"]
+                # Cek Kolom Finish B
+                try:
+                    idx = df_clean.columns.get_loc("Finish Moist B")
+                    if val > 15: 
+                        styles[idx] = 'background-color: #ff4b4b; color: white; font-weight: bold;' # MERAH
+                    else: 
+                        styles[idx] = 'background-color: #2ecc71; color: black; font-weight: bold;' # HIJAU
+                except: pass
 
             return styles
 
-        # Tampilkan tabel dengan styling (Pandas Styler)
-        st.dataframe(df_clean.style.apply(style_dataframe, axis=1), use_container_width=True)
+        # Tampilkan tabel dengan Warna QC
+        st.dataframe(df_clean.style.apply(qc_highlight, axis=1), use_container_width=True)
 
     else:
         st.warning("Data kosong.")
 
 except Exception as e:
     st.error(f"Error: {str(e)}")
-
