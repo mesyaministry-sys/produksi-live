@@ -245,7 +245,7 @@ try:
         
         st.divider()
         
-        # --- DOWNLOAD & TABEL (TRAFFIC LIGHT) ---
+        # --- DOWNLOAD & TABEL ---
         csv = df_clean.to_csv(index=False).encode('utf-8')
         st.download_button(
             label="📥 Download Data Harian (CSV)",
@@ -255,49 +255,50 @@ try:
         )
 
         st.subheader("🔍 Quality Control Data Check (🚦)")
-        st.caption("Indikator Warna: 🟢 Aman | 🟡 Waspada | 🔴 Bahaya")
+        st.caption("Indikator Particle: 🔴<75 | 🔵75-79.9 | 🟢80-88 | 🟡>88")
         
         # ==========================================
-        # 🚦 DEFINISI WARNA LAMPU QC (UPDATED)
+        # 🚦 DEFINISI WARNA LAMPU QC (LENGKAP)
         # ==========================================
         def qc_highlight(row):
             styles = [''] * len(row)
             
-            # ----------------------------------------
-            # 1. ATURAN WARNA ROTARY MOIST (A & B)
-            #    <= 13.9 : Hijau
-            #    14.0 - 15.9 : Kuning
-            #    >= 16.0 : Merah
-            # ----------------------------------------
+            # 1. ROTARY MOIST (A & B)
             for col in ["Rotary Moist A", "Rotary Moist B"]:
                 if col in df_clean.columns and pd.notnull(row[col]):
                     try:
                         val = float(row[col])
                         idx = df_clean.columns.get_loc(col)
-                        
-                        if val >= 16.0:
-                            styles[idx] = 'background-color: #ff4b4b; color: white; font-weight: bold;' # Merah
-                        elif val >= 14.0:
-                            styles[idx] = 'background-color: #f1c40f; color: black; font-weight: bold;' # Kuning
-                        else:
-                            styles[idx] = 'background-color: #2ecc71; color: black; font-weight: bold;' # Hijau
+                        if val >= 16.0: styles[idx] = 'background-color: #ff4b4b; color: white; font-weight: bold;' # Merah
+                        elif val >= 14.0: styles[idx] = 'background-color: #f1c40f; color: black; font-weight: bold;' # Kuning
+                        else: styles[idx] = 'background-color: #2ecc71; color: black; font-weight: bold;' # Hijau
                     except: pass
 
-            # ----------------------------------------
-            # 2. ATURAN WARNA FINISH PRODUCT (A & B)
-            #    > 15.0 : Merah
-            #    <= 15.0 : Hijau
-            # ----------------------------------------
+            # 2. FINISH MOIST (A & B)
             for col in ["Finish Moist A", "Finish Moist B"]:
                 if col in df_clean.columns and pd.notnull(row[col]):
                     try:
                         val = float(row[col])
                         idx = df_clean.columns.get_loc(col)
+                        if val > 15.0: styles[idx] = 'background-color: #ff4b4b; color: white; font-weight: bold;' # Merah
+                        else: styles[idx] = 'background-color: #2ecc71; color: black; font-weight: bold;' # Hijau
+                    except: pass
+
+            # 3. PARTICLE SIZE (A & B) - NEW FITUR
+            for col in ["Finish Particle A", "Finish Particle B"]:
+                if col in df_clean.columns and pd.notnull(row[col]):
+                    try:
+                        val = float(row[col])
+                        idx = df_clean.columns.get_loc(col)
                         
-                        if val > 15.0: 
+                        if val < 75.0: 
                             styles[idx] = 'background-color: #ff4b4b; color: white; font-weight: bold;' # Merah
-                        else: 
+                        elif 75.0 <= val <= 79.9:
+                            styles[idx] = 'background-color: #87CEFA; color: black; font-weight: bold;' # Biru Muda
+                        elif 80.0 <= val <= 88.0:
                             styles[idx] = 'background-color: #2ecc71; color: black; font-weight: bold;' # Hijau
+                        else: # > 88.0
+                            styles[idx] = 'background-color: #f1c40f; color: black; font-weight: bold;' # Kuning
                     except: pass
 
             return styles
