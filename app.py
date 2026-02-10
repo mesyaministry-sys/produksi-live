@@ -47,12 +47,11 @@ try:
     df_raw = pd.read_csv(url, header=None, dtype=str, keep_default_na=False)
 
     # ==========================================
-    # B. PENCARIAN DATA (PRODUK & FORMULA)
+    # B. PENCARIAN DATA (FORMULA & PRODUK)
     # ==========================================
     produk_a = "-"
     produk_b = "-"
     
-    # Variabel Formula
     f_bbku = "-"
     f_bakar = "-"
     f_loading = "-"
@@ -60,78 +59,83 @@ try:
     idx_start = 6 
 
     try:
-        # --- 1. CARI FORMULA (SCAN SELURUH KOLOM A) ---
-        # Kita cari di kolom paling kiri, baris 20 ke bawah (area footer)
-        footer_area = df_raw.iloc[20:, 0].astype(str).values
+        # --- 1. AMBIL FORMULA (TARGET BARIS 31, 32, 33) ---
+        # Di Python index dimulai dari 0. Jadi Baris 31 Excel = Index 30.
+        # Kita ambil range aman index 28 s/d 35 di Kolom A (Index 0)
+        scan_bawah = df_raw.iloc[28:38, 0].astype(str).values
         
-        for cell in footer_area:
+        for cell in scan_bawah:
             txt = cell.upper().replace("_", " ").strip()
             
-            # Ambil data setelah titik dua (:)
-            if "BBKU" in txt:
-                if ":" in cell: f_bbku = cell.split(":")[-1].strip()
+            # Logika Split: Ambil kata setelah titik dua ":"
+            if "BBKU" in txt and ":" in txt:
+                f_bbku = txt.split(":")[-1].strip()
             
-            if "BAHAN BAKAR" in txt:
-                if ":" in cell: f_bakar = cell.split(":")[-1].strip()
+            if "BAHAN BAKAR" in txt and ":" in txt:
+                f_bakar = txt.split(":")[-1].strip()
                 
-            if "LOADING" in txt:
-                if ":" in cell: f_loading = cell.split(":")[-1].strip()
+            if "LOADING" in txt and ":" in txt:
+                f_loading = txt.split(":")[-1].strip()
 
-        # --- 2. CARI POSISI JAM 9:00 ---
+        # --- 2. CARI BARIS JAM 9:00 ---
         scan_area = df_raw.iloc[:25, 0].astype(str)
         matches = scan_area[scan_area.str.contains(r"9[:\.]00", regex=True)].index
         
         if not matches.empty:
-            idx_start = matches[0] # Baris Jam 9:00 (Row 9)
+            idx_start = matches[0] # Baris Jam 9:00
             
-            # --- FUNGSI VALIDASI NAMA PRODUK ---
-            def is_product_name(val):
+            # --- FUNGSI FILTER PRODUK (ANTI ANGKA & ANTI HEADER) ---
+            def is_valid_name(val):
                 t = str(val).strip()
                 if len(t) < 2: return False
-                
-                # Tolak Header / Satuan
-                blacklist = ["moisture", "particle", "mesh", "max", "min", "avg", "tonnage", "checker", "paraph", "time", "%"]
-                if any(x in t.lower() for x in blacklist): return False
-                
-                # Tolak Angka Murni (misal "80,01" atau "10")
+                # Tolak Header
+                if any(x in t.lower() for x in ["moisture", "particle", "mesh", "max", "min", "tonnage", "checker"]): return False
+                # Tolak Angka Murni (80,01)
                 if t.replace('.','').replace(',','').isdigit(): return False
-                
-                # Tolak Range (misal "1-5")
+                # Tolak Range (1-5)
                 if re.match(r'^\d+-\d+$', t): return False
-                
                 return True
 
-            # --- CARI PRODUK A (KOLOM I / Index 8) ---
-            # Kita ambil 3 kandidat: Baris 8, 9, 10 pada Kolom I
-            # Lalu kita pilih mana yang BUKAN angka dan BUKAN header
-            kandidat_a = [
-                df_raw.iloc[idx_start-1, 8], # Baris 8
-                df_raw.iloc[idx_start, 8],   # Baris 9
-                df_raw.iloc[idx_start+1, 8]  # Baris 10
-            ]
+            # --- CARI PRODUK A (SEKITAR KOLOM I/J - Index 8,9) ---
+            # Kita cek di Baris 9:00 dan Baris Atasnya
+            candidates_a = []
+            # Cek Baris Atas (Row-1) Kolom 8,9
+            candidates_a.append(df_raw.iloc[idx_start-1, 8])
+            candidates_a.append(df_raw.iloc[idx_start-1, 9])
+            # Cek Baris Pas (Row 0) Kolom 8,9
+            candidates_a.append(df_raw.iloc[idx_start, 8])
+            candidates_a.append(df_raw.iloc[idx_start, 9])
             
-            for k in kandidat_a:
-                if is_product_name(k):
-                    produk_a = str(k).strip()
-                    break # Ketemu yang valid, stop.
+            for c in candidates_a:
+                if is_valid_name(c):
+                    # Prioritas: Mengandung Angka (Z 125)
+                    if any(char.isdigit() for char in str(c)):
+                        produk_a = str(c).strip()
+                        break
+                    elif produk_a == "-": 
+                        produk_a = str(c).strip()
 
-            # --- CARI PRODUK B (KOLOM N / Index 13) ---
-            kandidat_b = [
-                df_raw.iloc[idx_start-1, 13], # Baris 8
-                df_raw.iloc[idx_start, 13],   # Baris 9
-                df_raw.iloc[idx_start+1, 13]  # Baris 10
-            ]
+            # --- CARI PRODUK B (SEKITAR KOLOM N/O - Index 13,14) ---
+            candidates_b = []
+            # Cek Baris Atas & Pas di Kolom 13, 14
+            for r in [idx_start-1, idx_start]:
+                for c in [13, 14]:
+                    candidates_b.append(df_raw.iloc[r, c])
             
-            for k in kandidat_b:
-                if is_product_name(k):
-                    produk_b = str(k).strip()
-                    break
+            for c in candidates_b:
+                if is_valid_name(c):
+                    # Prioritas: Huruf Besar (PRODUCT HOLD)
+                    if str(c).isupper():
+                        produk_b = str(c).strip()
+                        break
+                    elif produk_b == "-":
+                        produk_b = str(c).strip()
 
     except Exception as e:
         pass
 
     # ==========================================
-    # C. OLAH DATA TABEL & TONNAGE
+    # C. OLAH DATA TABEL
     # ==========================================
     df = df_raw.iloc[idx_start:].copy() 
     
@@ -168,12 +172,10 @@ try:
     def hitung_tonnage(series):
         total = 0
         try:
-            # Ambil hanya yang valid (angka atau range)
             valid = series[~series.astype(str).isin(["-", "", "nan", "None"])].dropna()
-            
-            # Buang text produk jika tidak sengaja masuk (misal Z 125 masuk kolom tonnage)
+            # Buang text produk jika masuk kolom tonnage
             valid = valid[~valid.astype(str).str.contains(r'[A-Za-z]', regex=True)]
-
+            
             if not valid.empty:
                 last_val = str(valid.iloc[-1])
                 if "-" in last_val: 
@@ -189,54 +191,71 @@ try:
     total_gabungan = total_ton_a + total_ton_b
 
     # ==========================================
-    # D. TAMPILAN DASHBOARD
+    # D. TAMPILAN DASHBOARD (DIPERCANTIK)
     # ==========================================
     if not df_clean.empty:
         st.success(f"✅ Laporan: **{pilihan_bulan}** | Tanggal: **{pilihan_sheet}**")
         
         # --- INFO PRODUK ---
         st.markdown("### 🏷️ Informasi Batch Produksi")
-        col_info_1, col_info_2 = st.columns(2)
         
         txt_a = produk_a if produk_a not in ["-", "nan", ""] else "(Belum Diisi)"
         txt_b = produk_b if produk_b not in ["-", "nan", ""] else "(Kosong)"
 
+        # CSS Modern
         st.markdown("""
         <style>
-        .box-info { padding: 15px; border-radius: 8px; color: white; text-align: center; font-weight: bold; margin-bottom: 10px; }
-        .biru { background-color: #3498db; } 
-        .merah { background-color: #e74c3c; }
-        .abu { background-color: #34495e; border: 1px solid #7f8c8d; }
-        .judul { font-size: 14px; opacity: 0.8; margin-bottom: 5px; text-transform: uppercase; } 
-        .isi { font-size: 24px; }
-        .isi-kecil { font-size: 18px; color: #f1c40f; font-weight: bold; }
+        .card { 
+            padding: 20px; 
+            border-radius: 12px; 
+            color: white; 
+            text-align: center; 
+            margin-bottom: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .bg-blue { background: linear-gradient(135deg, #3498db, #2980b9); }
+        .bg-red { background: linear-gradient(135deg, #e74c3c, #c0392b); }
+        .bg-dark { background: #2c3e50; border-left: 5px solid #f1c40f; }
+        
+        .label { font-size: 12px; text-transform: uppercase; letter-spacing: 1px; opacity: 0.9; margin-bottom: 5px; }
+        .value { font-size: 22px; font-weight: 800; }
+        .value-small { font-size: 16px; font-weight: bold; color: #f1c40f; }
         </style>
         """, unsafe_allow_html=True)
 
-        with col_info_1:
-            st.markdown(f'<div class="box-info biru"><div class="judul">JENIS PRODUK A (KIRI)</div><div class="isi">{txt_a}</div></div>', unsafe_allow_html=True)
-        with col_info_2:
-            st.markdown(f'<div class="box-info merah"><div class="judul">JENIS PRODUK B (KANAN)</div><div class="isi">{txt_b}</div></div>', unsafe_allow_html=True)
+        c1, c2 = st.columns(2)
+        with c1:
+            st.markdown(f'<div class="card bg-blue"><div class="label">PRODUK LINE A</div><div class="value">{txt_a}</div></div>', unsafe_allow_html=True)
+        with c2:
+            st.markdown(f'<div class="card bg-red"><div class="label">PRODUK LINE B</div><div class="value">{txt_b}</div></div>', unsafe_allow_html=True)
         
-        # --- INFO FORMULA (BARU) ---
-        c_f1, c_f2, c_f3 = st.columns(3)
-        with c_f1:
-            st.markdown(f'<div class="box-info abu"><div class="judul">🧪 FORMULA BBKU</div><div class="isi-kecil">{f_bbku}</div></div>', unsafe_allow_html=True)
-        with c_f2:
-            st.markdown(f'<div class="box-info abu"><div class="judul">🔥 BAHAN BAKAR</div><div class="isi-kecil">{f_bakar}</div></div>', unsafe_allow_html=True)
-        with c_f3:
-            st.markdown(f'<div class="box-info abu"><div class="judul">🚛 LOADING</div><div class="isi-kecil">{f_loading}</div></div>', unsafe_allow_html=True)
+        # --- INFO FORMULA (FITUR BARU) ---
+        st.markdown("")
+        cf1, cf2, cf3 = st.columns(3)
+        with cf1:
+            st.markdown(f'<div class="card bg-dark"><div class="label">FORMULA BBKU</div><div class="value-small">{f_bbku}</div></div>', unsafe_allow_html=True)
+        with cf2:
+            st.markdown(f'<div class="card bg-dark"><div class="label">BAHAN BAKAR</div><div class="value-small">{f_bakar}</div></div>', unsafe_allow_html=True)
+        with cf3:
+            st.markdown(f'<div class="card bg-dark"><div class="label">LOADING</div><div class="value-small">{f_loading}</div></div>', unsafe_allow_html=True)
 
         st.divider()
 
         # --- METRIK ---
         st.subheader("🔥 Rotary Process (Gabungan A & B)")
-        gab_rm = pd.concat([df_clean["RM Rotary Moist A"], df_clean["RM Rotary Moist B"]])
-        gab_rot = pd.concat([df_clean["Rotary Moist A"], df_clean["Rotary Moist B"]])
+        
+        # Hitung Mean (Abaikan 0)
+        rm_a = df_clean[df_clean["RM Rotary Moist A"] > 0]["RM Rotary Moist A"]
+        rm_b = df_clean[df_clean["RM Rotary Moist B"] > 0]["RM Rotary Moist B"]
+        avg_rm = pd.concat([rm_a, rm_b]).mean()
+        
+        rot_a = df_clean[df_clean["Rotary Moist A"] > 0]["Rotary Moist A"]
+        rot_b = df_clean[df_clean["Rotary Moist B"] > 0]["Rotary Moist B"]
+        avg_rot = pd.concat([rot_a, rot_b]).mean()
         
         m1, m2, m3 = st.columns(3)
-        m1.metric("RM Rotary Moist (Avg)", f"{gab_rm.mean():.2f}%", "40 Max")
-        m2.metric("Rotary Moist (Avg)", f"{gab_rot.mean():.2f}%", "12-15")
+        m1.metric("RM Rotary Moist (Avg)", f"{avg_rm:.2f}%", "40 Max")
+        m2.metric("Rotary Moist (Avg)", f"{avg_rot:.2f}%", "12-15")
         m3.metric("Total Output Harian", f"{total_gabungan:.0f} TON", "A + B")
         
         st.markdown("---")
