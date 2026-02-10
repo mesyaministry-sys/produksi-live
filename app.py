@@ -168,7 +168,7 @@ try:
         """, unsafe_allow_html=True)
 
         with col_info_1:
-            val_a_display = produk_a if produk_a not in ["-", "nan"] else "(Belum Diisi)"
+            val_a_display = produk_a if produk_a not in ["-", "nan"] else "(Kosong)"
             st.markdown(f"""
             <div class="box-info biru">
                 <div class="judul">JENIS PRODUK A (KIRI)</div>
@@ -232,3 +232,4 @@ try:
 
 except Exception as e:
     st.error("Sedang memuat data...")
+
