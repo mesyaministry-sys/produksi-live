@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import re # Library untuk pencarian teks
 
 # ==========================================
 # ⚙️ KONFIGURASI
@@ -9,8 +8,6 @@ import re # Library untuk pencarian teks
 SHEET_ID = '1MQsvhmWmrGNtp3Txh07Z-88VfgEZTj_WBD5zLNs9GGY'
 
 st.set_page_config(page_title="Monitoring Produksi", layout="wide")
-
-# JUDUL SESUAI REQUEST
 st.title("🏭 Monitoring Produksi Live")
 st.caption("Created : Mahesya")
 
@@ -21,8 +18,8 @@ daftar_tanggal = [str(i) for i in range(1, 32)]
 
 with st.sidebar:
     st.header("📅 Pilih Periode")
-    pilihan_sheet = st.selectbox("Pilih Tanggal (Sheet):", daftar_tanggal, index=9) # Default tanggal 10
-
+    pilihan_sheet = st.selectbox("Pilih Tanggal (Sheet):", daftar_tanggal, index=9) 
+    
     if st.button("🔄 Refresh Data"):
         st.cache_data.clear()
 
@@ -33,42 +30,55 @@ url = f'https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sh
 
 try:
     # A. BACA DATA RAW
-    # Kita baca full dulu untuk mengambil header Z 125 & Product Hold
     df_raw = pd.read_csv(url, header=None)
 
-    # === PERBAIKAN DI SINI (MENGAMBIL DATA DARI ROW 9 / H9 & M9) ===
-    # Excel Row 9 = Python Index 8
-    # Excel Col H = Python Index 7
-    # Excel Col M = Python Index 12
+    # ==========================================
+    # B. SMART SEARCH (CARI POSISI JAM 9:00) 🕵️‍♂️
+    # ==========================================
+    # Daripada menebak index baris (yang sering geser), kita cari baris "9:00" secara otomatis.
+    
+    # Default nilai jika tidak ketemu
+    produk_a = "-"
+    produk_b = "-"
+    idx_start = 6 # Fallback index
 
     try:
-        # Ambil Line A (H9:J9) -> Kita tembak H9 (Index 8, 7)
-        val_a = str(df_raw.iloc[8, 7]) 
+        # Cari baris dimana Kolom 0 berisi teks "9:00"
+        # Kita scan 15 baris pertama saja biar cepat
+        scan_area = df_raw.iloc[:15, 0].astype(str)
+        matches = scan_area[scan_area.str.contains("9:00", na=False)].index
+        
+        if not matches.empty:
+            idx_start = matches[0] # Ketemu! Ini nomor baris yang benar (misal: 6)
+            
+            # AMBIL PRODUK LINE A (Disebelah kanan jam 9:00)
+            # Biasanya di Kolom I (Index 8). Kalau kosong, cek H (7).
+            val_a = str(df_raw.iloc[idx_start, 8]) 
+            if val_a == "nan" or val_a == "-" or val_a == "None":
+                 val_a = str(df_raw.iloc[idx_start, 7]) # Cek kolom sebelahnya
+            
+            if val_a != "nan" and val_a != "-":
+                 produk_a = val_a
 
-        # Jika H9 terbaca 'nan' (kosong), coba geser dikit ke I9 (Index 8, 8) jaga-jaga merge cell
-        if val_a == "nan" or val_a == "-":
-             val_a = str(df_raw.iloc[8, 8])
-
-        if val_a == "nan" or val_a == "-":
-             produk_a = "-"
-        else:
-             produk_a = val_a
-
-        # Ambil Line B (M9:O9) -> Kita tembak M9 (Index 8, 12)
-        val_b = str(df_raw.iloc[8, 12])
-        if val_b == "nan" or val_b == "-":
-             produk_b = "-"
-        else:
-             produk_b = val_b
+            # AMBIL PRODUK LINE B (Disebelah kanan jauh)
+            # Biasanya di Kolom M (Index 12).
+            val_b = str(df_raw.iloc[idx_start, 12])
+            if val_b == "nan" or val_b == "-" or val_b == "None":
+                 val_b = str(df_raw.iloc[idx_start, 13])
+            
+            if val_b != "nan" and val_b != "-":
+                 produk_b = val_b
     except:
-        produk_a = "-"
-        produk_b = "-"
-    # ==============================================================
+        pass
 
-    # B. POTONG BARIS (Mulai dari baris ke-7 untuk data angka)
-    df = df_raw.iloc[6:].copy()
+    # ==========================================
+    # C. OLAH DATA TABEL
+    # ==========================================
+    
+    # Potong data mulai dari baris "9:00" tadi (minus 1 baris buat header dummy)
+    # Tapi mapping kolom kita tetap pakai logika fixed agar rapi
+    df = df_raw.iloc[idx_start:].copy() # Ambil dari jam 9 kebawah
 
-    # C. DEFINISI KOLOM (MAPPING POSISI EXCEL)
     nama_kolom = [
         "Jam Rotary A",         # 0
         "RM Rotary Moist A",    # 1
@@ -78,32 +88,26 @@ try:
         "Rotary Moist B",       # 5
         "Jam Finish A",         # 6
         "Finish Moist A",       # 7
-        "Finish Particle A",    # 8  <-- POSISI PANAH MERAH (Z 211)
+        "Finish Particle A",    # 8 
         "Tonnage A",            # 9
         "Checker A",            # 10
         "Jam Finish B",         # 11 
         "Finish Moist B",       # 12
-        "Finish Particle B",    # 13 <-- POSISI PANAH HIJAU
+        "Finish Particle B",    # 13
         "Tonnage B",            # 14
         "Checker B",            # 15
         "Remarks"               # 16
     ]
-
-    # Ambil 17 kolom pertama
+    
+    # Ambil 17 kolom & Rapikan
     df = df.iloc[:, :len(nama_kolom)]
-
-    # Tambal kolom jika kurang (antisipasi error)
     if len(df.columns) < len(nama_kolom):
         for i in range(len(nama_kolom) - len(df.columns)):
-            df[f"Col_Kosong_{i}"] = np.nan
-
+            df[f"Col_{i}"] = np.nan
     df.columns = nama_kolom[:len(df.columns)]
-
+    
     # ==========================================
-    # D. (LOGIKA DETEKSI SUDAH DIPINDAH KE ATAS)
-    # ==========================================
-
-    # E. BERSIHKAN ANGKA (Persiapan Hitung)
+    # D. BERSIHKAN ANGKA
     # ==========================================
     target_angka = [
         "RM Rotary Moist A", "Rotary Moist A", 
@@ -111,18 +115,14 @@ try:
         "Finish Moist A", "Finish Particle A",
         "Finish Moist B", "Finish Particle B"
     ]
-
-    # Buat copy khusus untuk hitungan angka
+    
     df_angka = df.copy()
-
     for col in target_angka:
         if col in df_angka.columns:
-            # Ganti koma jadi titik
             df_angka[col] = df_angka[col].astype(str).str.replace(',', '.', regex=False)
-            # Paksa jadi angka (Teks produk Z 211 akan jadi NaN disini, aman untuk rata-rata)
             df_angka[col] = pd.to_numeric(df_angka[col], errors='coerce')
 
-    # F. HITUNG TONNAGE
+    # Hitung Tonnage
     def hitung_tonnage(series_data):
         total = 0
         try:
@@ -142,68 +142,78 @@ try:
     total_gabungan = total_ton_a + total_ton_b
 
     # ==========================================
-    # 3. TAMPILAN DASHBOARD (LAYOUT RAPI)
+    # E. TAMPILAN DASHBOARD
     # ==========================================
-
+    
     if not df.empty:
         st.success(f"✅ Data Tanggal {pilihan_sheet} Berhasil Ditarik!")
-
-        # --- BAGIAN 1: INFO PRODUK (PANAH BIRU) ---
-        # Kita buat kotak khusus info produk di atas agar menonjol
+        
+        # --- INFO PRODUK (HASIL SMART SEARCH) ---
         st.markdown("### 🏷️ Informasi Batch Produksi")
-
+        
         col_info_1, col_info_2 = st.columns(2)
+        
+        # Style Kotak Warna
+        st.markdown("""
+        <style>
+        .box-info { padding: 15px; border-radius: 8px; color: white; text-align: center; font-weight: bold; }
+        .biru { background-color: #3498db; }
+        .merah { background-color: #e74c3c; }
+        .judul { font-size: 14px; opacity: 0.9; margin-bottom: 5px; }
+        .isi { font-size: 24px; }
+        </style>
+        """, unsafe_allow_html=True)
 
-        # KOTAK KIRI (LINE A)
         with col_info_1:
-            # Tampilkan Produk A yang diambil dari Header tadi
-            st.info(f"**Jenis Produk Line A:** {produk_a}")
-
-        # KOTAK KANAN (LINE B)
+            if produk_a == "-" or produk_a == "nan": produk_a = "(Belum Diisi)"
+            st.markdown(f"""
+            <div class="box-info biru">
+                <div class="judul">JENIS PRODUK LINE A (KIRI)</div>
+                <div class="isi">{produk_a}</div>
+            </div>
+            """, unsafe_allow_html=True)
+            
         with col_info_2:
-            # Tampilkan Produk B yang diambil dari Header tadi
-            # Warna beda dikit biar terlihat pemisahnya
-            if produk_b == "-" or produk_b == "nan":
-                st.warning(f"**Jenis Produk Line B:** -")
-            else:
-                st.success(f"**Jenis Produk Line B:** {produk_b}")
-
+            if produk_b == "-" or produk_b == "nan": produk_b = "(Kosong)"
+            st.markdown(f"""
+            <div class="box-info merah">
+                <div class="judul">JENIS PRODUK LINE B (KANAN)</div>
+                <div class="isi">{produk_b}</div>
+            </div>
+            """, unsafe_allow_html=True)
+        
         st.divider()
 
-        # --- BAGIAN 2: ROTARY (GABUNGAN) ---
+        # --- ROTARY PROCESS ---
         st.subheader("🔥 Rotary Process (Gabungan A & B)")
-
+        
         gabungan_rm = pd.concat([df_angka["RM Rotary Moist A"], df_angka["RM Rotary Moist B"]])
         gabungan_rot = pd.concat([df_angka["Rotary Moist A"], df_angka["Rotary Moist B"]])
-
+        
         m1, m2, m3 = st.columns(3)
         m1.metric("RM Rotary Moist (Avg)", f"{gabungan_rm.mean():.2f}%", "40 Max")
         m2.metric("Rotary Moist (Avg)", f"{gabungan_rot.mean():.2f}%", "12-15")
         m3.metric("Total Output Harian", f"{total_gabungan:.0f} TON", "A + B")
-
+        
         st.markdown("---")
 
-        # --- BAGIAN 3: FINISH PRODUCT (TERPISAH A & B) ---
+        # --- FINISH PRODUCT ---
         col_a, col_b = st.columns(2)
-
-        # === LINE A (KIRI) ===
+        
         with col_a:
-            st.markdown(f"#### 🅰️ LINE A ({produk_a})")
-            # Tampilkan data hanya jika ada isinya
+            st.markdown(f"#### 🅰️ LINE A")
             if df_angka['Finish Moist A'].isnull().all():
-                 st.write("Data Line A Kosong")
+                 st.info("Menunggu data masuk...")
             else:
                 c1, c2 = st.columns(2)
                 c1.metric("Moisture A", f"{df_angka['Finish Moist A'].mean():.2f}%")
                 c2.metric("Particle Size A", f"{df_angka['Finish Particle A'].mean():.2f}")
                 st.metric("Produksi Line A", f"{total_ton_a:.0f} TON")
 
-        # === LINE B (KANAN) ===
         with col_b:
-            st.markdown(f"#### 🅱️ LINE B ({produk_b})")
-            # Cek apakah Line B ada datanya
+            st.markdown(f"#### 🅱️ LINE B")
             if df_angka['Finish Moist B'].isnull().all():
-                st.caption("🚫 Tidak ada aktivitas produksi di Line B")
+                st.info("Tidak ada produksi.")
             else:
                 c3, c4 = st.columns(2)
                 c3.metric("Moisture B", f"{df_angka['Finish Moist B'].mean():.2f}%")
@@ -211,8 +221,6 @@ try:
                 st.metric("Produksi Line B", f"{total_ton_b:.0f} TON")
 
         st.divider()
-
-        # --- TABEL DATA ---
         with st.expander("🔍 Lihat Tabel Data Mentah"):
             st.dataframe(df, use_container_width=True)
 
@@ -220,6 +228,4 @@ try:
         st.warning("Data kosong.")
 
 except Exception as e:
-    st.error("Terjadi masalah teknis.")
-    with st.expander("Lihat Error"):
-        st.write(e)
+    st.error("Sedang memuat data... Jika lama, coba Refresh.")
