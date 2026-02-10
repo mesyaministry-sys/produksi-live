@@ -14,7 +14,7 @@ DAFTAR_FILE = {
 
 st.set_page_config(page_title="Monitoring Produksi", layout="wide")
 st.title("🏭 Monitoring Produksi Live")
-st.caption("Created : Mahesya") # <-- Sesuai Request
+st.caption("Created : Mahesya") 
 
 # ==========================================
 # 1. MENU SAMPING (SIDEBAR)
@@ -47,7 +47,7 @@ try:
     df_raw = pd.read_csv(url, header=None, dtype=str, keep_default_na=False)
 
     # ==========================================
-    # B. SMART SEARCH (SCANNER BARIS ATAS) 🕵️‍♂️
+    # B. SMART SEARCH (PERBAIKAN: TEMBAK LANGSUNG KOLOM I & N)
     # ==========================================
     produk_a = "-"
     produk_b = "-"
@@ -59,67 +59,38 @@ try:
         matches = scan_area[scan_area.str.contains(r"9[:\.]00", regex=True)].index
         
         if not matches.empty:
-            idx_900 = matches[0]
-            idx_start = idx_900
+            idx_start = matches[0] # Baris Jam 9:00 (Row 9 di Excel)
             
-            # KUNCI PERBAIKAN: Fokus cari di SATU BARIS DI ATAS jam 9:00
-            # Karena di Excel Anda, "Z 125" ada di atas data angka.
-            row_target = idx_900 - 1 
+            # --- AMBIL PRODUK A (KIRI) ---
+            # Target: Kolom I (Index 8)
+            # Kita ambil range aman: Kolom H, I, J (Index 7, 8, 9) untuk jaga-jaga geser dikit
+            vals_a = df_raw.iloc[idx_start, 7:10].values.flatten()
             
-            # --- FUNGSI VALIDASI KETAT ---
-            def is_valid_product(text):
-                t = str(text).strip()
-                if len(t) < 2: return False
-                
-                # 1. Blacklist Header
-                blacklist = ["nan", "none", "moisture", "particle", "mesh", "max", "min", "avg", 
-                             "checker", "ok", "no", "shift", "time", "tonnage", "paraph", "%", "density"]
-                if any(bad in t.lower() for bad in blacklist): return False
-                
-                # 2. Tolak Angka Murni & Range (Misal "1-5", "10.5")
-                # Ini yang membuang "1-5" agar tidak terambil
-                if re.match(r'^\d+-\d+$', t): return False # Tolak format 1-5
-                if re.match(r'^[\d\.,]+$', t): return False # Tolak angka murni
-                
-                return True
-
-            # --- SCAN LINE A (KIRI) ---
-            # Area Kolom 6 s/d 11 (G-K) di Baris ATAS
-            candidates_a = []
-            vals_a = df_raw.iloc[row_target, 6:11].values.flatten()
             for v in vals_a:
-                if is_valid_product(v):
-                    candidates_a.append(str(v).strip())
+                t = str(v).strip()
+                # Filter: Bukan angka murni, bukan kosong, bukan header
+                if len(t) > 1 and not t.replace('.','').replace(',','').isdigit():
+                     if "max" not in t.lower() and "min" not in t.lower() and "mesh" not in t.lower():
+                        produk_a = t
+                        break # Ketemu langsung stop (Prioritas Kolom I)
+
+            # --- AMBIL PRODUK B (KANAN) ---
+            # Target: Kolom N (Index 13)
+            # Kita ambil range aman: Kolom M, N, O (Index 12, 13, 14)
+            vals_b = df_raw.iloc[idx_start, 12:15].values.flatten()
             
-            # Prioritas: Ambil yang ada ANGKA (Z 125)
-            for c in candidates_a:
-                if re.search(r'\d', c): 
-                    produk_a = c; break
-            # Jika tidak ketemu di baris atas, baru cek baris jam 9:00 (fallback)
-            if produk_a == "-":
-                vals_fallback = df_raw.iloc[idx_900, 6:11].values.flatten()
-                for v in vals_fallback:
-                    if is_valid_product(v) and re.search(r'\d', v):
-                        produk_a = str(v).strip(); break
-
-            # --- SCAN LINE B (KANAN) ---
-            # Area Kolom 11 s/d 18 (L-R) di Baris ATAS
-            candidates_b = []
-            vals_b = df_raw.iloc[row_target, 11:18].values.flatten()
             for v in vals_b:
-                if is_valid_product(v):
-                    candidates_b.append(str(v).strip())
-
-            # Prioritas: Ambil yang HURUF BESAR SEMUA (PRODUCT HOLD)
-            for c in candidates_b:
-                if c.isupper():
-                    produk_b = c; break
+                t = str(v).strip()
+                if len(t) > 1 and not t.replace('.','').replace(',','').isdigit():
+                     if "max" not in t.lower() and "min" not in t.lower() and "juan" not in t.lower():
+                        produk_b = t
+                        break
             
     except Exception as e:
         pass
 
     # ==========================================
-    # C. OLAH DATA TABEL
+    # C. OLAH DATA TABEL (DIKEMBALIKAN KE SCRIPT ASLI)
     # ==========================================
     df = df_raw.iloc[idx_start:].copy() 
     nama_kolom = [
@@ -145,6 +116,7 @@ try:
             df_angka[col] = df_angka[col].astype(str).str.replace(',', '.', regex=False)
             df_angka[col] = pd.to_numeric(df_angka[col], errors='coerce')
 
+    # HITUNG TONNAGE (INI YANG TADI HILANG, SAYA KEMBALIKAN)
     def hitung_tonnage(series):
         try:
             valid = series.dropna()
@@ -155,8 +127,9 @@ try:
         except: return 0
         return 0
 
-    ton_a = hitung_tonnage(df["Tonnage A"])
-    ton_b = hitung_tonnage(df["Tonnage B"]) 
+    total_ton_a = hitung_tonnage(df["Tonnage A"])
+    total_ton_b = hitung_tonnage(df["Tonnage B"]) 
+    total_gabungan = total_ton_a + total_ton_b # <-- INI SUDAH ADA LAGI
 
     # ==========================================
     # E. TAMPILAN DASHBOARD
@@ -191,7 +164,7 @@ try:
         gab_rot = pd.concat([df_angka["Rotary Moist A"], df_angka["Rotary Moist B"]])
         
         m1, m2, m3 = st.columns(3)
-        m1.metric("RM Rotary Moist (Avg)", f"{gab_rm.mean():.2f}%", "40 Max")
+        m1.metric("RM Rotary Moist (Avg)", f"{gabungan_rm.mean():.2f}%", "40 Max")
         m2.metric("Rotary Moist (Avg)", f"{gab_rot.mean():.2f}%", "12-15")
         m3.metric("Total Output Harian", f"{total_gabungan:.0f} TON", "A + B")
         
@@ -220,4 +193,3 @@ try:
 
 except Exception as e:
     st.error(f"Error: {str(e)}")
-
