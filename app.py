@@ -136,6 +136,7 @@ try:
     # E. DATA ANGKA
     # ==========================================
     idx_data_start = idx_900
+    # Cek mundur, apakah jam 8:00 ada?
     if "8" in str(df_raw.iloc[idx_900-1, 0]):
         idx_data_start = idx_900 - 1
         
@@ -143,7 +144,7 @@ try:
     
     df_clean = pd.DataFrame()
     
-    # MAPPING KOLOM
+    # MAPPING KOLOM (Sesuai Gambar 28.jpg)
     df_clean["Jam"]               = df.iloc[:, 0] 
     
     df_clean["RM Rotary Moist A"] = df.iloc[:, 1]
@@ -237,7 +238,7 @@ try:
         
         st.markdown("---")
 
-        # --- DETAIL PER LINE (POSISI DI ATAS GRAFIK) ---
+        # --- DETAIL PER LINE ---
         ca, cb = st.columns(2)
         with ca:
             st.markdown(f"#### 🅰️ LINE A")
@@ -254,7 +255,7 @@ try:
             st.metric("Produksi Line B", f"{total_ton_b:.0f} TON")
 
         # ==========================================
-        # 📈 FITUR GRAFIK (PINDAH KE BAWAH)
+        # 📈 FITUR GRAFIK (BARU)
         # ==========================================
         st.markdown("---")
         st.subheader("📈 Grafik Tren Harian")
