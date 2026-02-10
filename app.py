@@ -193,7 +193,6 @@ try:
         """, unsafe_allow_html=True)
 
         with col_info_1:
-            # Tampilkan produk atau tanda strip jika kosong
             txt_a = produk_a if produk_a not in ["-", ""] else "(Belum Diisi)"
             st.markdown(f"""
             <div class="box-info biru">
@@ -260,3 +259,4 @@ try:
 
 except Exception as e:
     st.error("Sedang memuat data...")
+
