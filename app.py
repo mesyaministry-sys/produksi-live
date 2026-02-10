@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+import re
 
 # ==========================================
 # ⚙️ KONFIGURASI
@@ -33,51 +34,58 @@ try:
     df_raw = pd.read_csv(url, header=None)
 
     # ==========================================
-    # B. SMART SEARCH (CARI POSISI JAM 9:00) 🕵️‍♂️
+    # B. SMART SEARCH (SCANNER MELEBAR) 📡
     # ==========================================
-    # Daripada menebak index baris (yang sering geser), kita cari baris "9:00" secara otomatis.
-    
-    # Default nilai jika tidak ketemu
     produk_a = "-"
     produk_b = "-"
-    idx_start = 6 # Fallback index
+    idx_start = 6 # Default fallback
 
     try:
-        # Cari baris dimana Kolom 0 berisi teks "9:00"
-        # Kita scan 15 baris pertama saja biar cepat
-        scan_area = df_raw.iloc[:15, 0].astype(str)
+        # 1. Cari dulu baris mana yang ada tulisan "9:00"
+        scan_area = df_raw.iloc[:20, 0].astype(str) # Cek 20 baris pertama
         matches = scan_area[scan_area.str.contains("9:00", na=False)].index
         
         if not matches.empty:
-            idx_start = matches[0] # Ketemu! Ini nomor baris yang benar (misal: 6)
+            idx_start = matches[0] # Ini nomor baris yang BENAR
             
-            # AMBIL PRODUK LINE A (Disebelah kanan jam 9:00)
-            # Biasanya di Kolom I (Index 8). Kalau kosong, cek H (7).
-            val_a = str(df_raw.iloc[idx_start, 8]) 
-            if val_a == "nan" or val_a == "-" or val_a == "None":
-                 val_a = str(df_raw.iloc[idx_start, 7]) # Cek kolom sebelahnya
-            
-            if val_a != "nan" and val_a != "-":
-                 produk_a = val_a
+            # FUNGSI PENCARI PINTAR (Mencari di rentang kolom)
+            def scan_range(row_idx, col_start, col_end):
+                # Ambil data dari beberapa kolom sekaligus
+                vals = df_raw.iloc[row_idx, col_start:col_end].astype(str)
+                found = []
+                for v in vals:
+                    v_clean = v.strip()
+                    # Abaikan data kosong atau strip
+                    if v_clean.lower() not in ["nan", "-", "none", "", "ok", "no"]:
+                        found.append(v_clean)
+                
+                # PRIORITAS: Ambil yang mengandung HURUF (misal "Z 125")
+                for f in found:
+                    if re.search('[a-zA-Z]', f):
+                        return f
+                # CADANGAN: Kalau tidak ada huruf, ambil angka pun boleh (misal "125")
+                if found:
+                    return found[0]
+                return "-"
 
-            # AMBIL PRODUK LINE B (Disebelah kanan jauh)
-            # Biasanya di Kolom M (Index 12).
-            val_b = str(df_raw.iloc[idx_start, 12])
-            if val_b == "nan" or val_b == "-" or val_b == "None":
-                 val_b = str(df_raw.iloc[idx_start, 13])
+            # SCAN LINE A: Cek kolom 7, 8, 9, 10 (Moisture s/d Tonnage)
+            # Area sapuan kita perlebar agar Z 125 pasti kena
+            res_a = scan_range(idx_start, 7, 11)
+            if res_a != "-": produk_a = res_a
+
+            # SCAN LINE B: Cek kolom 12, 13, 14, 15
+            res_b = scan_range(idx_start, 12, 16)
+            if res_b != "-": produk_b = res_b
             
-            if val_b != "nan" and val_b != "-":
-                 produk_b = val_b
-    except:
+    except Exception as e:
         pass
 
     # ==========================================
-    # C. OLAH DATA TABEL
+    # C. OLAH DATA TABEL (TETAP SAMA)
     # ==========================================
     
-    # Potong data mulai dari baris "9:00" tadi (minus 1 baris buat header dummy)
-    # Tapi mapping kolom kita tetap pakai logika fixed agar rapi
-    df = df_raw.iloc[idx_start:].copy() # Ambil dari jam 9 kebawah
+    # Ambil data mulai dari baris jam 9:00
+    df = df_raw.iloc[idx_start:].copy() 
 
     nama_kolom = [
         "Jam Rotary A",         # 0
@@ -99,16 +107,14 @@ try:
         "Remarks"               # 16
     ]
     
-    # Ambil 17 kolom & Rapikan
+    # Rapikan Kolom
     df = df.iloc[:, :len(nama_kolom)]
     if len(df.columns) < len(nama_kolom):
         for i in range(len(nama_kolom) - len(df.columns)):
             df[f"Col_{i}"] = np.nan
     df.columns = nama_kolom[:len(df.columns)]
     
-    # ==========================================
     # D. BERSIHKAN ANGKA
-    # ==========================================
     target_angka = [
         "RM Rotary Moist A", "Rotary Moist A", 
         "RM Rotary Moist B", "Rotary Moist B", 
@@ -148,37 +154,37 @@ try:
     if not df.empty:
         st.success(f"✅ Data Tanggal {pilihan_sheet} Berhasil Ditarik!")
         
-        # --- INFO PRODUK (HASIL SMART SEARCH) ---
+        # --- INFO PRODUK ---
         st.markdown("### 🏷️ Informasi Batch Produksi")
         
         col_info_1, col_info_2 = st.columns(2)
         
-        # Style Kotak Warna
+        # CSS Styling Kotak
         st.markdown("""
         <style>
-        .box-info { padding: 15px; border-radius: 8px; color: white; text-align: center; font-weight: bold; }
-        .biru { background-color: #3498db; }
-        .merah { background-color: #e74c3c; }
-        .judul { font-size: 14px; opacity: 0.9; margin-bottom: 5px; }
-        .isi { font-size: 24px; }
+        .box-info { padding: 20px; border-radius: 10px; color: white; text-align: center; box-shadow: 2px 2px 5px rgba(0,0,0,0.2); }
+        .biru { background: linear-gradient(90deg, #0072ff 0%, #00c6ff 100%); }
+        .merah { background: linear-gradient(90deg, #eb3349 0%, #f45c43 100%); }
+        .judul { font-size: 16px; font-weight: bold; margin-bottom: 5px; text-transform: uppercase; }
+        .isi { font-size: 28px; font-weight: 800; }
         </style>
         """, unsafe_allow_html=True)
 
         with col_info_1:
-            if produk_a == "-" or produk_a == "nan": produk_a = "(Belum Diisi)"
+            val_a_display = produk_a if produk_a not in ["-", "nan"] else "(Belum Diisi)"
             st.markdown(f"""
             <div class="box-info biru">
-                <div class="judul">JENIS PRODUK LINE A (KIRI)</div>
-                <div class="isi">{produk_a}</div>
+                <div class="judul">JENIS PRODUK A (KIRI)</div>
+                <div class="isi">{val_a_display}</div>
             </div>
             """, unsafe_allow_html=True)
             
         with col_info_2:
-            if produk_b == "-" or produk_b == "nan": produk_b = "(Kosong)"
+            val_b_display = produk_b if produk_b not in ["-", "nan"] else "(Kosong)"
             st.markdown(f"""
             <div class="box-info merah">
-                <div class="judul">JENIS PRODUK LINE B (KANAN)</div>
-                <div class="isi">{produk_b}</div>
+                <div class="judul">JENIS PRODUK B (KANAN)</div>
+                <div class="isi">{val_b_display}</div>
             </div>
             """, unsafe_allow_html=True)
         
@@ -228,4 +234,4 @@ try:
         st.warning("Data kosong.")
 
 except Exception as e:
-    st.error("Sedang memuat data... Jika lama, coba Refresh.")
+    st.error("Sedang memuat data...")
