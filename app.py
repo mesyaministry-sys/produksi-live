@@ -26,9 +26,9 @@ with c_logo:
     # Pastikan file 'logo_swasa.png' ada di folder yang sama!
     # Jika tidak ada, script tidak akan error tapi logo tidak muncul.
     try:
-        st.image("logo_swasa.png", width=120) 
+        st.image("logo_swasa.png.png", width=120) 
     except:
-        st.caption("Logo tidak ditemukan") # Placeholder jika gambar belum diupload
+        st.caption("logo_swasa.png.png") # Placeholder jika gambar belum diupload
 
 with c_judul:
     st.title("🏭 Monitoring Produksi BE")
@@ -295,3 +295,4 @@ try:
 
 except Exception as e:
     st.error(f"Error: {str(e)}")
+
