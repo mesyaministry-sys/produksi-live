@@ -31,7 +31,7 @@ with c_logo:
         st.caption("logo_swasa.png.png") # Placeholder jika gambar belum diupload
 
 with c_judul:
-    st.title("🏭 Monitoring Produksi BE")
+    st.title("Monitoring Produksi BE")
     st.caption("Created & Developer : Mahesya | 2026 🚦") 
 
 # ==========================================
@@ -295,4 +295,5 @@ try:
 
 except Exception as e:
     st.error(f"Error: {str(e)}")
+
 
