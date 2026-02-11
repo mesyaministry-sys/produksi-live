@@ -2,7 +2,8 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import re
-import time # Library untuk waktu (auto refresh)
+import time 
+from PIL import Image # Library untuk gambar
 
 # ==========================================
 # ⚙️ KONFIGURASI DATABASE BULANAN
@@ -14,8 +15,24 @@ DAFTAR_FILE = {
 }
 
 st.set_page_config(page_title="Monitoring Produksi", layout="wide")
-st.title("🏭 Monitoring Produksi BE")
-st.caption("Created & Developer : Mahesya | 2026 🚦") 
+
+# ==========================================
+# 🖼️ HEADER DENGAN LOGO
+# ==========================================
+# Membagi area atas jadi 2 kolom: Logo (Kecil) & Judul (Besar)
+c_logo, c_judul = st.columns([1, 5]) 
+
+with c_logo:
+    # Pastikan file 'logo_swasa.png' ada di folder yang sama!
+    # Jika tidak ada, script tidak akan error tapi logo tidak muncul.
+    try:
+        st.image("logo_swasa.png", width=120) 
+    except:
+        st.caption("Logo tidak ditemukan") # Placeholder jika gambar belum diupload
+
+with c_judul:
+    st.title("🏭 Monitoring Produksi BE")
+    st.caption("Created & Developer : Mahesya | 2026 🚦") 
 
 # ==========================================
 # 1. MENU SAMPING
@@ -31,7 +48,6 @@ with st.sidebar:
     st.subheader("📅 Periode Harian")
     pilihan_sheet = st.selectbox("Pilih Tanggal (Sheet):", daftar_tanggal, index=9) 
     
-    # FITUR AUTO REFRESH
     auto_refresh = st.checkbox("🔄 Auto Refresh (60s)", value=False)
     
     if st.button("🔄 Refresh Manual"):
@@ -39,7 +55,7 @@ with st.sidebar:
         st.rerun()
 
     if auto_refresh:
-        time.sleep(60) # Tunggu 60 detik
+        time.sleep(60) 
         st.cache_data.clear()
         st.rerun()
 
@@ -53,18 +69,13 @@ if "MASUKKAN_ID" in SHEET_ID_AKTIF or SHEET_ID_AKTIF == "":
 url = f'https://docs.google.com/spreadsheets/d/{SHEET_ID_AKTIF}/gviz/tq?tqx=out:csv&sheet={pilihan_sheet}'
 
 try:
-    # A. BACA DATA RAW
     df_raw = pd.read_csv(url, header=None, dtype=str, keep_default_na=False)
 
-    # ==========================================
-    # B. CARI JANGKAR (JAM 9:00)
-    # ==========================================
+    # --- CARI JANGKAR ---
     idx_900 = 6 
     found_anchor = False
-
     scan_col = df_raw.iloc[:30, 0].astype(str)
     matches = scan_col[scan_col.str.contains(r"9[:\.]00", regex=True)].index
-    
     if not matches.empty:
         idx_900 = matches[0]
         found_anchor = True
@@ -72,12 +83,8 @@ try:
         st.error("❌ Error: Tidak menemukan Jam 9:00 di Kolom A.")
         st.stop()
 
-    # ==========================================
-    # C. CARI PRODUK & FORMULA
-    # ==========================================
+    # --- CARI PRODUK ---
     produk_a, produk_b = "-", "-"
-    f_bbku, f_bakar, f_loading = "-", "-", "-"
-
     def valid_prod(val):
         t = str(val).strip()
         if len(t) < 2: return False
@@ -86,28 +93,25 @@ try:
         if any(x in t.lower() for x in ["moisture", "particle", "mesh", "max", "min", "tonnage", "time"]): return False
         return True
 
-    # Produk A
     for r in range(idx_900, max(0, idx_900-4), -1):
         for c in [8, 9, 10]:
             val = df_raw.iloc[r, c]
             if valid_prod(val):
-                if any(char.isdigit() for char in str(val)):
-                    produk_a = str(val).strip(); break
+                if any(char.isdigit() for char in str(val)): produk_a = str(val).strip(); break
         if produk_a != "-": break
 
-    # Produk B
     for r in range(idx_900, max(0, idx_900-4), -1):
         for c in [13, 14, 15]:
             val = df_raw.iloc[r, c]
             if valid_prod(val):
-                if str(val).isupper():
-                    produk_b = str(val).strip(); break
+                if str(val).isupper(): produk_b = str(val).strip(); break
         if produk_b != "-": break
 
     if produk_a == "-": produk_a = "(Belum Diisi)"
     if produk_b == "-": produk_b = "(Kosong)"
 
-    # Formula
+    # --- CARI FORMULA ---
+    f_bbku, f_bakar, f_loading = "-", "-", "-"
     for i in range(25, min(60, len(df_raw))):
         row_txt = " ".join(df_raw.iloc[i].astype(str).values).upper().replace("_", " ").replace("  ", " ")
         if "BBKU" in row_txt and ":" in row_txt: f_bbku = row_txt.split(":")[-1].split("FORMULA")[0].strip()
@@ -119,16 +123,12 @@ try:
     if len(f_bakar)<2: f_bakar="-"; 
     if len(f_loading)<2: f_loading="-"
 
-    # ==========================================
-    # D. DATA ANGKA
-    # ==========================================
+    # --- OLAH DATA ---
     idx_data_start = idx_900
     if "8" in str(df_raw.iloc[idx_900-1, 0]): idx_data_start = idx_900 - 1
-        
     df = df_raw.iloc[idx_data_start:].copy()
     df_clean = pd.DataFrame()
     
-    # Mapping
     df_clean["Jam"]               = df.iloc[:, 0] 
     df_clean["RM Rotary Moist A"] = df.iloc[:, 1]
     df_clean["Rotary Moist A"]    = df.iloc[:, 2]
@@ -141,15 +141,12 @@ try:
     df_clean["Finish Particle B"] = df.iloc[:, 13]
     df_clean["Tonnage B"]         = df.iloc[:, 14]
 
-    # Cleaning Angka
     cols_angka = ["RM Rotary Moist A", "Rotary Moist A", "RM Rotary Moist B", "Rotary Moist B", 
                   "Finish Moist A", "Finish Particle A", "Finish Moist B", "Finish Particle B"]
-    
     for c in cols_angka:
         df_clean[c] = df_clean[c].astype(str).str.replace(',', '.', regex=False)
         df_clean[c] = pd.to_numeric(df_clean[c], errors='coerce')
 
-    # Hitung Tonnage
     def hitung_tonnage(series):
         total = 0
         try:
@@ -170,12 +167,11 @@ try:
     total_gabungan = total_ton_a + total_ton_b
 
     # ==========================================
-    # E. TAMPILAN DASHBOARD
+    # F. TAMPILAN DASHBOARD
     # ==========================================
     if not df_clean.empty:
         st.success(f"✅ Laporan: **{pilihan_bulan}** | Tanggal: **{pilihan_sheet}**")
         
-        # --- INFO ---
         col_info_1, col_info_2 = st.columns(2)
         st.markdown("""
         <style>
@@ -199,11 +195,9 @@ try:
 
         st.divider()
         
-        # --- METRIK ---
         rm_a = df_clean[df_clean["RM Rotary Moist A"] > 0]["RM Rotary Moist A"]
         rm_b = df_clean[df_clean["RM Rotary Moist B"] > 0]["RM Rotary Moist B"]
         avg_rm = pd.concat([rm_a, rm_b]).mean()
-        
         rot_a = df_clean[df_clean["Rotary Moist A"] > 0]["Rotary Moist A"]
         rot_b = df_clean[df_clean["Rotary Moist B"] > 0]["Rotary Moist B"]
         avg_rot = pd.concat([rot_a, rot_b]).mean()
@@ -215,7 +209,6 @@ try:
         
         st.markdown("---")
 
-        # --- DETAIL LINE ---
         ca, cb = st.columns(2)
         with ca:
             st.markdown(f"#### 🅰️ LINE A")
@@ -245,7 +238,7 @@ try:
         
         st.divider()
         
-        # --- DOWNLOAD & TABEL ---
+        # --- DOWNLOAD & TABEL (TRAFFIC LIGHT) ---
         csv = df_clean.to_csv(index=False).encode('utf-8')
         st.download_button(
             label="📥 Download Data Harian (CSV)",
@@ -257,9 +250,6 @@ try:
         st.subheader("🔍 Quality Control Data Check (🚦)")
         st.caption("Indikator Particle: 🔴<75 | 🔵75-79.9 | 🟢80-88 | 🟡>88")
         
-        # ==========================================
-        # 🚦 DEFINISI WARNA LAMPU QC (LENGKAP)
-        # ==========================================
         def qc_highlight(row):
             styles = [''] * len(row)
             
@@ -269,9 +259,9 @@ try:
                     try:
                         val = float(row[col])
                         idx = df_clean.columns.get_loc(col)
-                        if val >= 16.0: styles[idx] = 'background-color: #ff4b4b; color: white; font-weight: bold;' # Merah
-                        elif val >= 14.0: styles[idx] = 'background-color: #f1c40f; color: black; font-weight: bold;' # Kuning
-                        else: styles[idx] = 'background-color: #2ecc71; color: black; font-weight: bold;' # Hijau
+                        if val >= 16.0: styles[idx] = 'background-color: #ff4b4b; color: white; font-weight: bold;'
+                        elif val >= 14.0: styles[idx] = 'background-color: #f1c40f; color: black; font-weight: bold;'
+                        else: styles[idx] = 'background-color: #2ecc71; color: black; font-weight: bold;'
                     except: pass
 
             # 2. FINISH MOIST (A & B)
@@ -280,30 +270,24 @@ try:
                     try:
                         val = float(row[col])
                         idx = df_clean.columns.get_loc(col)
-                        if val > 15.0: styles[idx] = 'background-color: #ff4b4b; color: white; font-weight: bold;' # Merah
-                        else: styles[idx] = 'background-color: #2ecc71; color: black; font-weight: bold;' # Hijau
+                        if val > 15.0: styles[idx] = 'background-color: #ff4b4b; color: white; font-weight: bold;'
+                        else: styles[idx] = 'background-color: #2ecc71; color: black; font-weight: bold;'
                     except: pass
 
-            # 3. PARTICLE SIZE (A & B) - NEW FITUR
+            # 3. PARTICLE SIZE (A & B)
             for col in ["Finish Particle A", "Finish Particle B"]:
                 if col in df_clean.columns and pd.notnull(row[col]):
                     try:
                         val = float(row[col])
                         idx = df_clean.columns.get_loc(col)
-                        
-                        if val < 75.0: 
-                            styles[idx] = 'background-color: #ff4b4b; color: white; font-weight: bold;' # Merah
-                        elif 75.0 <= val <= 79.9:
-                            styles[idx] = 'background-color: #87CEFA; color: black; font-weight: bold;' # Biru Muda
-                        elif 80.0 <= val <= 88.0:
-                            styles[idx] = 'background-color: #2ecc71; color: black; font-weight: bold;' # Hijau
-                        else: # > 88.0
-                            styles[idx] = 'background-color: #f1c40f; color: black; font-weight: bold;' # Kuning
+                        if val < 75.0: styles[idx] = 'background-color: #ff4b4b; color: white; font-weight: bold;'
+                        elif 75.0 <= val <= 79.9: styles[idx] = 'background-color: #87CEFA; color: black; font-weight: bold;'
+                        elif 80.0 <= val <= 88.0: styles[idx] = 'background-color: #2ecc71; color: black; font-weight: bold;'
+                        else: styles[idx] = 'background-color: #f1c40f; color: black; font-weight: bold;'
                     except: pass
 
             return styles
 
-        # Tampilkan tabel dengan Warna QC
         st.dataframe(df_clean.style.apply(qc_highlight, axis=1), use_container_width=True)
 
     else:
@@ -311,4 +295,3 @@ try:
 
 except Exception as e:
     st.error(f"Error: {str(e)}")
-
