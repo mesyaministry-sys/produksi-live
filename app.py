@@ -248,7 +248,7 @@ try:
         )
 
         st.subheader("🔍 Quality Control Data Check (🚦)")
-        st.caption("Indikator Particle: 🔴<75 | 🔵75-79.9 | 🟢80-88 | 🟡>88")
+        st.caption("Indikator : 🔴danger | 🔵medium | 🟢safe quality | 🟡warning")
         
         def qc_highlight(row):
             styles = [''] * len(row)
@@ -295,6 +295,7 @@ try:
 
 except Exception as e:
     st.error(f"Error: {str(e)}")
+
 
 
 
