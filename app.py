@@ -2,106 +2,24 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import re
-import time 
-from PIL import Image 
+import time # Library untuk waktu (auto refresh)
 
 # ==========================================
-# ⚙️ KONFIGURASI HALAMAN
-# ==========================================
-st.set_page_config(page_title="Monitoring Produksi BE", layout="wide", page_icon="🏭")
-
-# ==========================================
-# 🛡️ STEALTH MODE (SEMBUNYIKAN MENU & GITHUB)
-# ==========================================
-st.markdown("""
-    <style>
-    /* Sembunyikan Menu Hamburger & Footer */
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    header {visibility: hidden;}
-    [data-testid="stToolbar"] {visibility: hidden;}
-    
-    /* Box Merah untuk Error Validasi */
-    .error-box {
-        padding: 30px;
-        background-color: #ffebee;
-        border: 2px solid #ef5350;
-        border-radius: 15px;
-        color: #c62828;
-        text-align: center;
-        font-weight: bold;
-        margin-bottom: 20px;
-        font-size: 18px;
-    }
-    .empty-state {
-        text-align: center; padding: 50px; background-color: #f8f9fa; 
-        border: 2px dashed #d1d8e0; border-radius: 15px; color: #95a5a6;
-    }
-    </style>
-""", unsafe_allow_html=True)
-
-# ==========================================
-# 🔒 SISTEM KEAMANAN (LOGIN DARI SECRETS)
-# ==========================================
-try:
-    USER_RAHASIA = st.secrets["credentials"]["username"]
-    PASS_RAHASIA = st.secrets["credentials"]["password"]
-except:
-    # Cadangan jika secrets belum disetting (agar tidak error)
-    USER_RAHASIA = "mahesya13"
-    PASS_RAHASIA = "swasa226"
-
-def check_login():
-    if "logged_in" not in st.session_state:
-        st.session_state["logged_in"] = False
-
-    if not st.session_state["logged_in"]:
-        st.markdown("""<style>.login-container {margin-top: 100px; padding: 40px; border-radius: 10px; background-color: #f8f9fa; box-shadow: 0 4px 6px rgba(0,0,0,0.1); text-align: center; max-width: 400px; margin-left: auto; margin-right: auto;} .stTextInput > label {font-weight:bold; color:#2c3e50;}</style>""", unsafe_allow_html=True)
-        col1, col2, col3 = st.columns([1, 2, 1])
-        with col2:
-            st.markdown('<div class="login-container">', unsafe_allow_html=True)
-            st.markdown("### 🔒 RESTRICTED ACCESS")
-            st.caption("Monitoring Produksi BE")
-            user_input = st.text_input("Username", key="user_input")
-            pass_input = st.text_input("Password", type="password", key="pass_input")
-            if st.button("LOGIN", type="primary", use_container_width=True):
-                if user_input == USER_RAHASIA and pass_input == PASS_RAHASIA:
-                    st.session_state["logged_in"] = True
-                    st.rerun()
-                else:
-                    st.error("❌ Akses Ditolak!")
-            st.markdown('</div>', unsafe_allow_html=True)
-        return False
-    else:
-        return True
-
-if not check_login():
-    st.stop()
-
-# ==========================================
-# 🚀 MULAI KONTEN DASHBOARD
-# ==========================================
-
 # ⚙️ KONFIGURASI DATABASE BULANAN
+# ==========================================
 DAFTAR_FILE = {
     "Januari 2026": "1MQsvhmWmrGNtp3Txh07Z-88VfgEZTj_WBD5zLNs9GGY",  
-    "Februari 2026": "12ZVOHJf4pFImwP6W1iLZgBe56RvN1Q3a3BnKWcJeOys",              
-    "Maret 2026": "MASUKKAN_ID_SHEET_MARET_DISINI",                    
+    "Februari 2026": "12ZVOHJf4pFImwP6W1iLZgBe56RvN1Q3a3BnKWcJeOys",             
+    "Maret 2026": "MASUKKAN_ID_SHEET_MARET_DISINI",                   
 }
 
-# 🖼️ HEADER
-c_logo, c_judul = st.columns([1, 5]) 
-with c_logo:
-    try: st.image("logo_swasa.png.png", width=160) 
-    except:
-        try: st.image("logo_swasa.png", width=160)
-        except: st.caption("")
+st.set_page_config(page_title="Monitoring Produksi", layout="wide")
+st.title("🏭 Monitoring Produksi BE")
+st.caption("Created & Dev : Mahesya | 2026 🚦") 
 
-with c_judul:
-    st.title("Monitoring Produksi BE")
-    st.caption("Created & Dev : Mahesya | 2026 🚦") 
-
+# ==========================================
 # 1. MENU SAMPING
+# ==========================================
 daftar_tanggal = [str(i) for i in range(1, 32)]
 
 with st.sidebar:
@@ -113,21 +31,21 @@ with st.sidebar:
     st.subheader("📅 Periode Harian")
     pilihan_sheet = st.selectbox("Pilih Tanggal (Sheet):", daftar_tanggal, index=9) 
     
+    # FITUR AUTO REFRESH
     auto_refresh = st.checkbox("🔄 Auto Refresh (60s)", value=False)
+    
     if st.button("🔄 Refresh Manual"):
         st.cache_data.clear()
         st.rerun()
-    st.divider()
-    if st.button("🔒 LOGOUT"):
-        st.session_state["logged_in"] = False
-        st.rerun()
 
     if auto_refresh:
-        time.sleep(60) 
+        time.sleep(60) # Tunggu 60 detik
         st.cache_data.clear()
         st.rerun()
 
+# ==========================================
 # 2. PROSES DATA
+# ==========================================
 if "MASUKKAN_ID" in SHEET_ID_AKTIF or SHEET_ID_AKTIF == "":
     st.info(f"📁 Laporan untuk bulan **{pilihan_bulan}** belum dihubungkan.")
     st.stop()
@@ -135,183 +53,129 @@ if "MASUKKAN_ID" in SHEET_ID_AKTIF or SHEET_ID_AKTIF == "":
 url = f'https://docs.google.com/spreadsheets/d/{SHEET_ID_AKTIF}/gviz/tq?tqx=out:csv&sheet={pilihan_sheet}'
 
 try:
+    # A. BACA DATA RAW
     df_raw = pd.read_csv(url, header=None, dtype=str, keep_default_na=False)
 
-    # =========================================================================
-    # 🕵️‍♂️ POLISI BULAN (MONTH VALIDATOR 2.0 - LEBIH PINTAR)
-    # =========================================================================
-    # Logic: Cari cell "DATE" di baris awal, baca isinya, bandingkan dengan bulan pilihan.
-    
-    is_valid_month = True
-    detected_wrong_month = None
-    
-    # 1. Mapping Bulan (Nama -> Angka)
-    month_map = {
-        "JANUARI": 1, "FEBRUARI": 2, "MARET": 3, "APRIL": 4, "MEI": 5, "JUNI": 6,
-        "JULI": 7, "AGUSTUS": 8, "SEPTEMBER": 9, "OKTOBER": 10, "NOVEMBER": 11, "DESEMBER": 12
-    }
-    # Ambil angka bulan yang dipilih user (Misal: FEBRUARI = 2)
-    target_month_name = pilihan_bulan.split(" ")[0].upper()
-    target_month_num = month_map.get(target_month_name, 0)
+    # ==========================================
+    # B. CARI JANGKAR (JAM 9:00)
+    # ==========================================
+    idx_900 = 6 
+    found_anchor = False
 
-    # 2. Scan Baris 1-10 di Excel untuk cari kata "DATE" atau "TANGGAL"
-    header_rows = df_raw.iloc[:10, :5] # Scan area header kiri atas
+    scan_col = df_raw.iloc[:30, 0].astype(str)
+    matches = scan_col[scan_col.str.contains(r"9[:\.]00", regex=True)].index
     
-    found_header_date = False
-    
-    for idx, row in header_rows.iterrows():
-        row_str = " ".join(row.astype(str).values).upper()
-        
-        # Jika ketemu baris yang ada kata "DATE"
-        if "DATE" in row_str or "TANGGAL" in row_str:
-            found_header_date = True
-            
-            # Cek keyword bulan di baris tersebut (Misal: "4-FEB")
-            detected_num = 0
-            if "JAN" in row_str: detected_num = 1
-            elif "FEB" in row_str: detected_num = 2
-            elif "MAR" in row_str: detected_num = 3
-            elif "APR" in row_str: detected_num = 4
-            elif "MAY" in row_str or "MEI" in row_str: detected_num = 5
-            elif "JUN" in row_str: detected_num = 6
-            elif "JUL" in row_str: detected_num = 7
-            elif "AUG" in row_str or "AGU" in row_str: detected_num = 8
-            elif "SEP" in row_str: detected_num = 9
-            elif "OCT" in row_str or "OKT" in row_str: detected_num = 10
-            elif "NOV" in row_str: detected_num = 11
-            elif "DEC" in row_str or "DES" in row_str: detected_num = 12
-            
-            # 3. Bandingkan!
-            # Jika bulan terdeteksi (detected_num > 0) DAN tidak sama dengan target
-            if detected_num > 0 and detected_num != target_month_num:
-                is_valid_month = False
-                # Cari nama bulan salah untuk pesan error
-                for k, v in month_map.items():
-                    if v == detected_num: detected_wrong_month = k
-                break # Stop scanning, sudah ketahuan salah
-    
-    # =========================================================================
-
-    # JIKA DATA TERBUKTI HANTU (COPYAN BULAN LALU) -> BLOKIR
-    if not is_valid_month:
-        df_clean = pd.DataFrame() # Kosongkan data
-        st.markdown(f"""
-        <div class="error-box">
-            ⛔ STOP! DATA TIDAK VALID (GHOST DATA)<br><br>
-            <span style="font-size:16px; font-weight:normal; color:#333;">
-            Anda sedang membuka Sheet Tanggal <b>{pilihan_sheet}</b> di Bulan <b>{target_month_name}</b>.<br>
-            Tetapi, file Excel mendeteksi Header Tanggal bulan <b>{detected_wrong_month}</b>.<br><br>
-            <i>Ini artinya Admin belum menghapus/update data bulan lalu di sheet ini.<br>
-            Sistem memblokir data agar Anda tidak melihat laporan yang salah.</i>
-            </span>
-        </div>
-        """, unsafe_allow_html=True)
-    
+    if not matches.empty:
+        idx_900 = matches[0]
+        found_anchor = True
     else:
-        # --- LANJUT PROSES NORMAL (DATA VALID) ---
-        
-        # Cari Jangkar (Jam 9:00)
-        idx_900 = 6 
-        found_anchor = False
-        scan_col = df_raw.iloc[:30, 0].astype(str)
-        matches = scan_col[scan_col.str.contains(r"9[:\.]00", regex=True)].index
-        if not matches.empty:
-            idx_900 = matches[0]
-            found_anchor = True
-        else:
-            df_clean = pd.DataFrame() 
-
-        if found_anchor:
-            # Cari Produk
-            produk_a, produk_b = "-", "-"
-            def valid_prod(val):
-                t = str(val).strip()
-                if len(t) < 2: return False
-                if t.replace('.','').replace(',','').isdigit(): return False 
-                if re.match(r'^\d+-\d+$', t): return False
-                if any(x in t.lower() for x in ["moisture", "particle", "mesh", "max", "min", "tonnage", "time"]): return False
-                return True
-
-            for r in range(idx_900, max(0, idx_900-4), -1):
-                for c in [8, 9, 10]:
-                    val = df_raw.iloc[r, c]
-                    if valid_prod(val):
-                        if any(char.isdigit() for char in str(val)): produk_a = str(val).strip(); break
-                if produk_a != "-": break
-
-            for r in range(idx_900, max(0, idx_900-4), -1):
-                for c in [13, 14, 15]:
-                    val = df_raw.iloc[r, c]
-                    if valid_prod(val):
-                        if str(val).isupper(): produk_b = str(val).strip(); break
-                if produk_b != "-": break
-
-            if produk_a == "-": produk_a = "(Belum Diisi)"
-            if produk_b == "-": produk_b = "(Kosong)"
-
-            # Cari Formula
-            f_bbku, f_bakar, f_loading = "-", "-", "-"
-            for i in range(25, min(60, len(df_raw))):
-                row_txt = " ".join(df_raw.iloc[i].astype(str).values).upper().replace("_", " ").replace("  ", " ")
-                if "BBKU" in row_txt and ":" in row_txt: f_bbku = row_txt.split(":")[-1].split("FORMULA")[0].strip()
-                if "BAHAN BAKAR" in row_txt and ":" in row_txt: f_bakar = row_txt.split(":")[-1].split("LOADING")[0].strip()
-                if "LOADING" in row_txt and ":" in row_txt: f_loading = row_txt.split(":")[-1].strip()
-
-            for x in [f_bbku, f_bakar, f_loading]: x = x.replace("NAN", "").replace(",", "").strip()
-            if len(f_bbku)<2: f_bbku="-"; 
-            if len(f_bakar)<2: f_bakar="-"; 
-            if len(f_loading)<2: f_loading="-"
-
-            # Olah Data
-            idx_data_start = idx_900
-            if "8" in str(df_raw.iloc[idx_900-1, 0]): idx_data_start = idx_900 - 1
-            
-            df = df_raw.iloc[idx_data_start:].copy()
-            df_clean = pd.DataFrame()
-            
-            df_clean["Jam"]               = df.iloc[:, 0] 
-            df_clean["RM Rotary Moist A"] = df.iloc[:, 1]
-            df_clean["Rotary Moist A"]    = df.iloc[:, 2]
-            df_clean["RM Rotary Moist B"] = df.iloc[:, 4]
-            df_clean["Rotary Moist B"]    = df.iloc[:, 5]
-            df_clean["Finish Moist A"]    = df.iloc[:, 7]
-            df_clean["Finish Particle A"] = df.iloc[:, 8]
-            df_clean["Tonnage A"]         = df.iloc[:, 9]
-            df_clean["Finish Moist B"]    = df.iloc[:, 12]
-            df_clean["Finish Particle B"] = df.iloc[:, 13]
-            df_clean["Tonnage B"]         = df.iloc[:, 14]
-
-            cols_angka = ["RM Rotary Moist A", "Rotary Moist A", "RM Rotary Moist B", "Rotary Moist B", 
-                          "Finish Moist A", "Finish Particle A", "Finish Moist B", "Finish Particle B"]
-            for c in cols_angka:
-                df_clean[c] = df_clean[c].astype(str).str.replace(',', '.', regex=False)
-                df_clean[c] = pd.to_numeric(df_clean[c], errors='coerce')
-
-            def hitung_tonnage(series):
-                total = 0
-                try:
-                    valid = series[~series.astype(str).isin(["-", "", "nan", "None"])].dropna()
-                    valid = valid[~valid.astype(str).str.contains(r'[A-Za-z]', regex=True)]
-                    if not valid.empty:
-                        last_val = str(valid.iloc[-1])
-                        if "-" in last_val: 
-                            parts = last_val.split("-")
-                            clean_part = parts[-1].strip()
-                            if clean_part.replace('.','').isdigit(): total = float(clean_part)
-                        elif last_val.replace('.','').isdigit(): total = float(last_val)
-                except: total = 0
-                return total
-
-            total_ton_a = hitung_tonnage(df_clean["Tonnage A"])
-            total_ton_b = hitung_tonnage(df_clean["Tonnage B"]) 
-            total_gabungan = total_ton_a + total_ton_b
+        st.error("❌ Error: Tidak menemukan Jam 9:00 di Kolom A.")
+        st.stop()
 
     # ==========================================
-    # F. TAMPILAN DASHBOARD
+    # C. CARI PRODUK & FORMULA
+    # ==========================================
+    produk_a, produk_b = "-", "-"
+    f_bbku, f_bakar, f_loading = "-", "-", "-"
+
+    def valid_prod(val):
+        t = str(val).strip()
+        if len(t) < 2: return False
+        if t.replace('.','').replace(',','').isdigit(): return False 
+        if re.match(r'^\d+-\d+$', t): return False
+        if any(x in t.lower() for x in ["moisture", "particle", "mesh", "max", "min", "tonnage", "time"]): return False
+        return True
+
+    # Produk A
+    for r in range(idx_900, max(0, idx_900-4), -1):
+        for c in [8, 9, 10]:
+            val = df_raw.iloc[r, c]
+            if valid_prod(val):
+                if any(char.isdigit() for char in str(val)):
+                    produk_a = str(val).strip(); break
+        if produk_a != "-": break
+
+    # Produk B
+    for r in range(idx_900, max(0, idx_900-4), -1):
+        for c in [13, 14, 15]:
+            val = df_raw.iloc[r, c]
+            if valid_prod(val):
+                if str(val).isupper():
+                    produk_b = str(val).strip(); break
+        if produk_b != "-": break
+
+    if produk_a == "-": produk_a = "(Belum Diisi)"
+    if produk_b == "-": produk_b = "(Kosong)"
+
+    # Formula
+    for i in range(25, min(60, len(df_raw))):
+        row_txt = " ".join(df_raw.iloc[i].astype(str).values).upper().replace("_", " ").replace("  ", " ")
+        if "BBKU" in row_txt and ":" in row_txt: f_bbku = row_txt.split(":")[-1].split("FORMULA")[0].strip()
+        if "BAHAN BAKAR" in row_txt and ":" in row_txt: f_bakar = row_txt.split(":")[-1].split("LOADING")[0].strip()
+        if "LOADING" in row_txt and ":" in row_txt: f_loading = row_txt.split(":")[-1].strip()
+
+    for x in [f_bbku, f_bakar, f_loading]: x = x.replace("NAN", "").replace(",", "").strip()
+    if len(f_bbku)<2: f_bbku="-"; 
+    if len(f_bakar)<2: f_bakar="-"; 
+    if len(f_loading)<2: f_loading="-"
+
+    # ==========================================
+    # D. DATA ANGKA
+    # ==========================================
+    idx_data_start = idx_900
+    if "8" in str(df_raw.iloc[idx_900-1, 0]): idx_data_start = idx_900 - 1
+        
+    df = df_raw.iloc[idx_data_start:].copy()
+    df_clean = pd.DataFrame()
+    
+    # Mapping
+    df_clean["Jam"]               = df.iloc[:, 0] 
+    df_clean["RM Rotary Moist A"] = df.iloc[:, 1]
+    df_clean["Rotary Moist A"]    = df.iloc[:, 2]
+    df_clean["RM Rotary Moist B"] = df.iloc[:, 4]
+    df_clean["Rotary Moist B"]    = df.iloc[:, 5]
+    df_clean["Finish Moist A"]    = df.iloc[:, 7]
+    df_clean["Finish Particle A"] = df.iloc[:, 8]
+    df_clean["Tonnage A"]         = df.iloc[:, 9]
+    df_clean["Finish Moist B"]    = df.iloc[:, 12]
+    df_clean["Finish Particle B"] = df.iloc[:, 13]
+    df_clean["Tonnage B"]         = df.iloc[:, 14]
+
+    # Cleaning Angka
+    cols_angka = ["RM Rotary Moist A", "Rotary Moist A", "RM Rotary Moist B", "Rotary Moist B", 
+                  "Finish Moist A", "Finish Particle A", "Finish Moist B", "Finish Particle B"]
+    
+    for c in cols_angka:
+        df_clean[c] = df_clean[c].astype(str).str.replace(',', '.', regex=False)
+        df_clean[c] = pd.to_numeric(df_clean[c], errors='coerce')
+
+    # Hitung Tonnage
+    def hitung_tonnage(series):
+        total = 0
+        try:
+            valid = series[~series.astype(str).isin(["-", "", "nan", "None"])].dropna()
+            valid = valid[~valid.astype(str).str.contains(r'[A-Za-z]', regex=True)]
+            if not valid.empty:
+                last_val = str(valid.iloc[-1])
+                if "-" in last_val: 
+                    parts = last_val.split("-")
+                    clean_part = parts[-1].strip()
+                    if clean_part.replace('.','').isdigit(): total = float(clean_part)
+                elif last_val.replace('.','').isdigit(): total = float(last_val)
+        except: total = 0
+        return total
+
+    total_ton_a = hitung_tonnage(df_clean["Tonnage A"])
+    total_ton_b = hitung_tonnage(df_clean["Tonnage B"]) 
+    total_gabungan = total_ton_a + total_ton_b
+
+    # ==========================================
+    # E. TAMPILAN DASHBOARD
     # ==========================================
     if not df_clean.empty:
         st.success(f"✅ Laporan: **{pilihan_bulan}** | Tanggal: **{pilihan_sheet}**")
         
+        # --- INFO ---
         col_info_1, col_info_2 = st.columns(2)
         st.markdown("""
         <style>
@@ -335,35 +199,36 @@ try:
 
         st.divider()
         
-        def fmt(val): return f"{val:.2f}" if pd.notnull(val) else "-"
-
+        # --- METRIK ---
         rm_a = df_clean[df_clean["RM Rotary Moist A"] > 0]["RM Rotary Moist A"]
         rm_b = df_clean[df_clean["RM Rotary Moist B"] > 0]["RM Rotary Moist B"]
         avg_rm = pd.concat([rm_a, rm_b]).mean()
+        
         rot_a = df_clean[df_clean["Rotary Moist A"] > 0]["Rotary Moist A"]
         rot_b = df_clean[df_clean["Rotary Moist B"] > 0]["Rotary Moist B"]
         avg_rot = pd.concat([rot_a, rot_b]).mean()
         
         m1, m2, m3 = st.columns(3)
-        m1.metric("RM Rotary Moist (Avg)", f"{fmt(avg_rm)}%", "40 Max")
-        m2.metric("Rotary Moist (Avg)", f"{fmt(avg_rot)}%", "12-15")
+        m1.metric("RM Rotary Moist (Avg)", f"{avg_rm:.2f}%", "40 Max")
+        m2.metric("Rotary Moist (Avg)", f"{avg_rot:.2f}%", "12-15")
         m3.metric("Total Output Harian", f"{total_gabungan:.0f} TON", "A + B")
         
         st.markdown("---")
 
+        # --- DETAIL LINE ---
         ca, cb = st.columns(2)
         with ca:
             st.markdown(f"#### 🅰️ LINE A")
             c1, c2 = st.columns(2)
-            c1.metric("Moisture A", f"{fmt(df_clean['Finish Moist A'].mean())}%")
-            c2.metric("Particle A", f"{fmt(df_clean['Finish Particle A'].mean())}")
+            c1.metric("Moisture A", f"{df_clean['Finish Moist A'].mean():.2f}%")
+            c2.metric("Particle A", f"{df_clean['Finish Particle A'].mean():.2f}")
             st.metric("Produksi Line A", f"{total_ton_a:.0f} TON")
 
         with cb:
             st.markdown(f"#### 🅱️ LINE B")
             c3, c4 = st.columns(2)
-            c3.metric("Moisture B", f"{fmt(df_clean['Finish Moist B'].mean())}%")
-            c4.metric("Particle B", f"{fmt(df_clean['Finish Particle B'].mean())}")
+            c3.metric("Moisture B", f"{df_clean['Finish Moist B'].mean():.2f}%")
+            c4.metric("Particle B", f"{df_clean['Finish Particle B'].mean():.2f}")
             st.metric("Produksi Line B", f"{total_ton_b:.0f} TON")
 
         # --- GRAFIK ---
@@ -380,6 +245,7 @@ try:
         
         st.divider()
         
+        # --- DOWNLOAD & TABEL ---
         csv = df_clean.to_csv(index=False).encode('utf-8')
         st.download_button(
             label="📥 Download Data Harian (CSV)",
@@ -389,50 +255,59 @@ try:
         )
 
         st.subheader("🔍 Quality Control Data Check (🚦)")
-        st.caption("Indikator : 🔴danger | 🔵medium | 🟢safe quality | 🟡warning")
+        st.caption("Indikator Particle: 🔴<75 | 🔵75-79.9 | 🟢80-88 | 🟡>88")
         
+        # ==========================================
+        # 🚦 DEFINISI WARNA LAMPU QC (LENGKAP)
+        # ==========================================
         def qc_highlight(row):
             styles = [''] * len(row)
+            
+            # 1. ROTARY MOIST (A & B)
             for col in ["Rotary Moist A", "Rotary Moist B"]:
                 if col in df_clean.columns and pd.notnull(row[col]):
                     try:
                         val = float(row[col])
                         idx = df_clean.columns.get_loc(col)
-                        if val >= 16.0: styles[idx] = 'background-color: #ff4b4b; color: white; font-weight: bold;'
-                        elif val >= 14.0: styles[idx] = 'background-color: #f1c40f; color: black; font-weight: bold;'
-                        else: styles[idx] = 'background-color: #2ecc71; color: black; font-weight: bold;'
+                        if val >= 16.0: styles[idx] = 'background-color: #ff4b4b; color: white; font-weight: bold;' # Merah
+                        elif val >= 14.0: styles[idx] = 'background-color: #f1c40f; color: black; font-weight: bold;' # Kuning
+                        else: styles[idx] = 'background-color: #2ecc71; color: black; font-weight: bold;' # Hijau
                     except: pass
+
+            # 2. FINISH MOIST (A & B)
             for col in ["Finish Moist A", "Finish Moist B"]:
                 if col in df_clean.columns and pd.notnull(row[col]):
                     try:
                         val = float(row[col])
                         idx = df_clean.columns.get_loc(col)
-                        if val > 15.0: styles[idx] = 'background-color: #ff4b4b; color: white; font-weight: bold;'
-                        else: styles[idx] = 'background-color: #2ecc71; color: black; font-weight: bold;'
+                        if val > 15.0: styles[idx] = 'background-color: #ff4b4b; color: white; font-weight: bold;' # Merah
+                        else: styles[idx] = 'background-color: #2ecc71; color: black; font-weight: bold;' # Hijau
                     except: pass
+
+            # 3. PARTICLE SIZE (A & B) - NEW FITUR
             for col in ["Finish Particle A", "Finish Particle B"]:
                 if col in df_clean.columns and pd.notnull(row[col]):
                     try:
                         val = float(row[col])
                         idx = df_clean.columns.get_loc(col)
-                        if val < 75.0: styles[idx] = 'background-color: #ff4b4b; color: white; font-weight: bold;'
-                        elif 75.0 <= val <= 79.9: styles[idx] = 'background-color: #87CEFA; color: black; font-weight: bold;'
-                        elif 80.0 <= val <= 88.0: styles[idx] = 'background-color: #2ecc71; color: black; font-weight: bold;'
-                        else: styles[idx] = 'background-color: #f1c40f; color: black; font-weight: bold;'
+                        
+                        if val < 75.0: 
+                            styles[idx] = 'background-color: #ff4b4b; color: white; font-weight: bold;' # Merah
+                        elif 75.0 <= val <= 79.9:
+                            styles[idx] = 'background-color: #87CEFA; color: black; font-weight: bold;' # Biru Muda
+                        elif 80.0 <= val <= 88.0:
+                            styles[idx] = 'background-color: #2ecc71; color: black; font-weight: bold;' # Hijau
+                        else: # > 88.0
+                            styles[idx] = 'background-color: #f1c40f; color: black; font-weight: bold;' # Kuning
                     except: pass
+
             return styles
 
+        # Tampilkan tabel dengan Warna QC
         st.dataframe(df_clean.style.apply(qc_highlight, axis=1), use_container_width=True)
 
     else:
-        # Tampilan jika data benar-benar kosong (Belum ada jam 9 pagi)
-        if is_valid_month:
-            st.markdown(f"""
-            <div class="empty-state">
-                <h3>📂 DATA KOSONG</h3>
-                <p>Belum ada data inputan (Jam 09:00 belum diisi) untuk tanggal <b>{pilihan_sheet} {pilihan_bulan}</b>.</p>
-            </div>
-            """, unsafe_allow_html=True)
+        st.warning("Data kosong.")
 
 except Exception as e:
     st.error(f"Error: {str(e)}")
