@@ -4,7 +4,6 @@ import numpy as np
 import re
 import time 
 from PIL import Image 
-from datetime import datetime
 
 # ==========================================
 # ⚙️ KONFIGURASI HALAMAN
@@ -21,23 +20,19 @@ st.markdown("""
     header {visibility: hidden;}
     [data-testid="stToolbar"] {visibility: hidden;}
     
-    .status-ok {
-        padding: 15px; background-color: #e8f5e9; border: 1px solid #4caf50;
-        border-radius: 8px; color: #2e7d32; font-weight: bold; text-align: center;
-    }
-    .status-error {
-        padding: 15px; background-color: #ffebee; border: 1px solid #ff5252;
-        border-radius: 8px; color: #c62828; font-weight: bold; text-align: center;
+    .error-box {
+        padding: 20px; background-color: #ffebee; border: 2px solid #ef5350;
+        border-radius: 10px; color: #c62828; text-align: center; font-weight: bold; margin-bottom: 20px;
     }
     .empty-state {
-        text-align: center; padding: 40px; background-color: #f8f9fa; 
-        border: 2px dashed #d1d8e0; border-radius: 15px; color: #7f8c8d;
+        text-align: center; padding: 50px; background-color: #f8f9fa; 
+        border: 2px dashed #d1d8e0; border-radius: 15px; color: #95a5a6;
     }
     </style>
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 🔒 SISTEM KEAMANAN (LOGIN)
+# 🔒 SISTEM KEAMANAN
 # ==========================================
 try:
     USER_RAHASIA = st.secrets["credentials"]["username"]
@@ -50,8 +45,8 @@ def check_login():
     if "logged_in" not in st.session_state: st.session_state["logged_in"] = False
     if not st.session_state["logged_in"]:
         st.markdown("""<style>.login-container {margin-top: 100px; padding: 40px; border-radius: 10px; background-color: #f8f9fa; box-shadow: 0 4px 6px rgba(0,0,0,0.1); text-align: center; max-width: 400px; margin-left: auto; margin-right: auto;} .stTextInput > label {font-weight:bold; color:#2c3e50;}</style>""", unsafe_allow_html=True)
-        c1, c2, c3 = st.columns([1, 2, 1])
-        with c2:
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
             st.markdown('<div class="login-container">', unsafe_allow_html=True)
             st.markdown("### 🔒 RESTRICTED ACCESS")
             st.caption("Monitoring Produksi BE")
@@ -72,10 +67,10 @@ if not check_login(): st.stop()
 # 🚀 APLIKASI UTAMA
 # ==========================================
 
-# 👇 UPDATE PENTING: ID FILE FEBRUARI SUDAH SAYA GANTI DENGAN YANG BARU
+# ID FILE (PASTIKAN ID FEBRUARI SUDAH BENAR SESUAI LINK TERAKHIR)
 DAFTAR_FILE = {
     "Januari 2026": "1MQsvhmWmrGNtp3Txh07Z-88VfgEZTj_WBD5zLNs9GGY",  
-    "Februari 2026": "1YQYvaRZzVttXVmo4PkF-qHP_rdVUXBAej-ryxgqwb8c", # <--- ID BARU (LINK BAPAK)
+    "Februari 2026": "1YQYvaRZzVttXVmo4PkF-qHP_rdVUXBAej-ryxgqwb8c", 
     "Maret 2026": "MASUKKAN_ID_SHEET_MARET_DISINI",                    
 }
 
@@ -92,7 +87,7 @@ with c_judul:
 daftar_tanggal = [str(i) for i in range(1, 32)]
 with st.sidebar:
     st.header("🗂️ Menu Utama")
-    pilihan_bulan = st.selectbox("Pilih Bulan Laporan:", list(DAFTAR_FILE.keys()), index=1) # Default ke Februari
+    pilihan_bulan = st.selectbox("Pilih Bulan Laporan:", list(DAFTAR_FILE.keys()), index=1)
     SHEET_ID_AKTIF = DAFTAR_FILE[pilihan_bulan]
     st.divider()
     st.subheader("📅 Periode Harian")
@@ -112,65 +107,61 @@ if "MASUKKAN_ID" in SHEET_ID_AKTIF or SHEET_ID_AKTIF == "":
 url = f'https://docs.google.com/spreadsheets/d/{SHEET_ID_AKTIF}/gviz/tq?tqx=out:csv&sheet={pilihan_sheet}'
 
 try:
-    # 1. BACA DATA DARI GOOGLE SHEET
-    #    Jika sheet tidak ada (misal tgl 14 belum dibuat), Google kadang mengembalikan sheet pertama (tgl 1).
-    #    Inilah penyebab error sebelumnya.
+    # 1. BACA DATA
     df_raw = pd.read_csv(url, header=None, dtype=str, keep_default_na=False)
 
     # =========================================================================
-    # 🕵️‍♂️ VALIDATOR TANGGAL PINTAR (SMART DATE CHECK)
+    # 🕵️‍♂️ SATPAM TANGGAL (DAY MATCHING) - SOLUSI FINAL
     # =========================================================================
-    # Tujuannya: Memastikan data yang tampil BENAR-BENAR tanggal yang dipilih.
-    # Jika User pilih tgl 14, tapi isi Excel tgl 1 -> BLOKIR.
+    # Masalah: Sheet "5" tidak ada -> Google kirim Sheet "1" (Default)
+    # Solusi: Baca angka tanggal di dalam Excel. Kalau beda dengan pilihan menu -> BLOKIR.
     
-    data_valid = False
-    pesan_validasi = ""
+    is_valid_sheet = False
+    detected_date_in_excel = "Tidak Diketahui"
     
-    # Ambil 20 baris pertama untuk mencari Header Tanggal
+    # Target Tanggal (Apa yang dipilih user) -> Misal "5"
+    target_day = str(pilihan_sheet) 
+    
+    # Scan 20 Baris pertama, cari cell yang mengandung Format Tanggal
+    # Kita cari angka tanggal di area Header
     header_area = df_raw.iloc[:20, :10].values.flatten()
     
-    # Kita cari angka tanggal yang dipilih user (Misal "14") di header
-    # Format di Excel Bapak biasanya: "Date : 4-Feb" atau "4-Feb"
-    
-    target_tgl = str(pilihan_sheet) # "14"
-    target_bln = pilihan_bulan.split(" ")[0][:3].upper() # "FEB"
-    
-    found_correct_date = False
-    found_any_date = False
+    found_any_date_header = False
     
     for cell in header_area:
         txt = str(cell).upper().strip()
-        # Cek apakah cell ini berisi tanggal? (Misal ada kata JAN, FEB, MAR)
-        if any(x in txt for x in ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"]):
-            found_any_date = True
-            # Cek apakah tanggalnya COCOK?
-            # Regex mencari pola angka tanggal. Contoh: "4-Feb" -> match "4"
-            match = re.search(r'(\d+)', txt)
+        
+        # Cek Keyword Tanggal/Date
+        if "DATE" in txt or "TANGGAL" in txt or "TGL" in txt:
+            found_any_date_header = True
+            
+            # Coba ambil Angka pertama yang muncul di string itu
+            # Misal: "Date : 4 Feb" -> Ambil "4"
+            match = re.search(r'\b(\d{1,2})\b', txt)
             if match:
-                tgl_excel = match.group(1)
-                # Jika angka tanggal (misal 4) sama dengan pilihan user (4) DAN Bulannya sama (FEB)
-                if tgl_excel == target_tgl and target_bln in txt:
-                    found_correct_date = True
-                    break
+                detected_day = match.group(1)
+                detected_date_in_excel = detected_day
+                
+                # BANDINGKAN: Apakah angka di Excel == Angka di Menu?
+                if detected_day == target_day:
+                    is_valid_sheet = True
+                    break # Cocok! Keluar loop
     
-    # KEPUTUSAN FINAL:
-    if found_correct_date:
-        data_valid = True
-    elif not found_any_date:
-        # Jika tidak ketemu tanggal sama sekali di header, tapi ada data 9:00
-        # Kemungkinan format header beda, kita loloskan tapi dengan warning kecil (atau blokir biar aman)
-        # Di sini kita blokir saja biar aman kalau sheetnya kosong/tidak ada.
-        data_valid = False
-        pesan_validasi = "Sheet Kosong / Tidak Ditemukan."
-    else:
-        # Ada tanggal, TAPI SALAH (Misal pilih 14, yang muncul data tgl 1)
-        data_valid = False
-        pesan_validasi = f"⚠️ Sheet tanggal {pilihan_sheet} belum dibuat. (Google mengembalikan data default)"
+    # Logic Darurat: Jika tidak ada kata "Date", tapi ada data produksi (jam 9),
+    # Kita asumsikan itu sheet default (Sheet 1) yang dikirim karena error.
+    # Jadi kita wajib curiga.
+    
+    # Jika kita pilih tanggal > 1 (misal 5), tapi header tidak ketemu/tidak cocok, blokir.
+    # Karena biasanya Google melempar ke Sheet 1.
+    if target_day != "1" and not is_valid_sheet:
+        # Extra Check: Apakah ini Sheet 1 yang nyasar?
+        # Kalau di header ada tulisan "1" atau "01", dan kita minta "5" -> REJECT
+        pass 
 
     # =========================================================================
 
-    if data_valid:
-        # --- PROSES DATA SEPERTI BIASA ---
+    if is_valid_sheet:
+        # --- PROSES DATA NORMAL ---
         idx_900 = 6 
         found_anchor = False
         scan_col = df_raw.iloc[:30, 0].astype(str)
@@ -193,4 +184,154 @@ try:
             for r in range(idx_900, max(0, idx_900-4), -1):
                 for c in [8, 9, 10]:
                     val = df_raw.iloc[r, c]
-                    if valid_prod(val) and any(char.isdigit() for char in str(val)): produk
+                    if valid_prod(val) and any(char.isdigit() for char in str(val)): produk_a = str(val).strip(); break
+                if produk_a != "-": break
+
+            for r in range(idx_900, max(0, idx_900-4), -1):
+                for c in [13, 14, 15]:
+                    val = df_raw.iloc[r, c]
+                    if valid_prod(val) and str(val).isupper(): produk_b = str(val).strip(); break
+                if produk_b != "-": break
+
+            if produk_a == "-": produk_a = "(Belum Diisi)"
+            if produk_b == "-": produk_b = "(Kosong)"
+
+            # Formula
+            f_bbku, f_bakar, f_loading = "-", "-", "-"
+            for i in range(25, min(60, len(df_raw))):
+                row_txt = " ".join(df_raw.iloc[i].astype(str).values).upper()
+                if "BBKU" in row_txt and ":" in row_txt: f_bbku = row_txt.split(":")[-1].split("FORMULA")[0].strip()
+                if "BAHAN BAKAR" in row_txt and ":" in row_txt: f_bakar = row_txt.split(":")[-1].split("LOADING")[0].strip()
+                if "LOADING" in row_txt and ":" in row_txt: f_loading = row_txt.split(":")[-1].strip()
+
+            for x in [f_bbku, f_bakar, f_loading]: x = x.replace("NAN", "").replace(",", "").strip()
+            if len(f_bbku)<2: f_bbku="-"; 
+            if len(f_bakar)<2: f_bakar="-"; 
+            if len(f_loading)<2: f_loading="-"
+
+            # Olah Data
+            idx_data_start = idx_900
+            if "8" in str(df_raw.iloc[idx_900-1, 0]): idx_data_start = idx_900 - 1
+            
+            df = df_raw.iloc[idx_data_start:].copy()
+            df_clean = pd.DataFrame()
+            
+            df_clean["Jam"]               = df.iloc[:, 0] 
+            df_clean["RM Rotary Moist A"] = df.iloc[:, 1]
+            df_clean["Rotary Moist A"]    = df.iloc[:, 2]
+            df_clean["RM Rotary Moist B"] = df.iloc[:, 4]
+            df_clean["Rotary Moist B"]    = df.iloc[:, 5]
+            df_clean["Finish Moist A"]    = df.iloc[:, 7]
+            df_clean["Finish Particle A"] = df.iloc[:, 8]
+            df_clean["Tonnage A"]         = df.iloc[:, 9]
+            df_clean["Finish Moist B"]    = df.iloc[:, 12]
+            df_clean["Finish Particle B"] = df.iloc[:, 13]
+            df_clean["Tonnage B"]         = df.iloc[:, 14]
+
+            cols = ["RM Rotary Moist A", "Rotary Moist A", "RM Rotary Moist B", "Rotary Moist B", 
+                    "Finish Moist A", "Finish Particle A", "Finish Moist B", "Finish Particle B"]
+            for c in cols:
+                df_clean[c] = df_clean[c].astype(str).str.replace(',', '.', regex=False)
+                df_clean[c] = pd.to_numeric(df_clean[c], errors='coerce')
+
+            def get_ton(series):
+                total = 0
+                try:
+                    valid = series[~series.astype(str).isin(["-", "nan"])].dropna()
+                    valid = valid[~valid.astype(str).str.contains(r'[A-Za-z]', regex=True)]
+                    if not valid.empty:
+                        last = str(valid.iloc[-1])
+                        if "-" in last: total = float(last.split("-")[-1].strip())
+                        elif last.replace('.','').isdigit(): total = float(last)
+                except: total = 0
+                return total
+
+            ton_a = get_ton(df_clean["Tonnage A"])
+            ton_b = get_ton(df_clean["Tonnage B"]) 
+            total_gabungan = ton_a + ton_b
+
+    # ==========================================
+    # F. TAMPILAN DASHBOARD
+    # ==========================================
+    
+    # Hanya Tampilkan Dashboard Jika Sheet Valid & Data Ada
+    if is_valid_sheet and not df_clean.empty:
+        st.success(f"✅ Laporan: **{pilihan_bulan}** | Tanggal: **{pilihan_sheet}**")
+        
+        col_info_1, col_info_2 = st.columns(2)
+        st.markdown("""<style>.card { padding: 20px; border-radius: 12px; text-align: center; margin-bottom: 10px; color: white; box-shadow: 0 4px 6px rgba(0,0,0,0.1); } .bg-blue { background: linear-gradient(135deg, #3498db, #2980b9); } .bg-red { background: linear-gradient(135deg, #e74c3c, #c0392b); } .bg-dark { background-color: #2c3e50; border: 1px solid #34495e; padding: 15px; border-radius: 8px; } .label { font-size: 12px; text-transform: uppercase; letter-spacing: 1px; opacity: 0.8; margin-bottom: 5px; color: #ecf0f1; } .value { font-size: 24px; font-weight: 800; } .value-small { font-size: 18px; font-weight: bold; color: #f1c40f; }</style>""", unsafe_allow_html=True)
+
+        with col_info_1: st.markdown(f'<div class="card bg-blue"><div class="label">JENIS PRODUK A (KIRI)</div><div class="value">{produk_a}</div></div>', unsafe_allow_html=True)
+        with col_info_2: st.markdown(f'<div class="card bg-red"><div class="label">JENIS PRODUK B (KANAN)</div><div class="value">{produk_b}</div></div>', unsafe_allow_html=True)
+        
+        c1, c2, c3 = st.columns(3)
+        with c1: st.markdown(f'<div class="bg-dark" style="text-align:center;"><div class="label">FORMULA BBKU</div><div class="value-small">{f_bbku}</div></div>', unsafe_allow_html=True)
+        with c2: st.markdown(f'<div class="bg-dark" style="text-align:center;"><div class="label">BAHAN BAKAR</div><div class="value-small">{f_bakar}</div></div>', unsafe_allow_html=True)
+        with c3: st.markdown(f'<div class="bg-dark" style="text-align:center;"><div class="label">LOADING</div><div class="value-small">{f_loading}</div></div>', unsafe_allow_html=True)
+
+        st.divider()
+        def fmt(val): return f"{val:.2f}" if pd.notnull(val) else "-"
+        
+        rm_a = df_clean[df_clean["RM Rotary Moist A"] > 0]["RM Rotary Moist A"]
+        rot_a = df_clean[df_clean["Rotary Moist A"] > 0]["Rotary Moist A"]
+        m1, m2, m3 = st.columns(3)
+        m1.metric("RM Rotary Moist (Avg)", f"{fmt(rm_a.mean())}%", "40 Max")
+        m2.metric("Rotary Moist (Avg)", f"{fmt(rot_a.mean())}%", "12-15")
+        m3.metric("Total Output Harian", f"{total_gabungan:.0f} TON", "A + B")
+        st.markdown("---")
+
+        ca, cb = st.columns(2)
+        with ca:
+            st.markdown(f"#### 🅰️ LINE A")
+            c1, c2 = st.columns(2)
+            c1.metric("Moisture A", f"{fmt(df_clean['Finish Moist A'].mean())}%")
+            c2.metric("Particle A", f"{fmt(df_clean['Finish Particle A'].mean())}")
+            st.metric("Produksi Line A", f"{ton_a:.0f} TON")
+        with cb:
+            st.markdown(f"#### 🅱️ LINE B")
+            c3, c4 = st.columns(2)
+            c3.metric("Moisture B", f"{fmt(df_clean['Finish Moist B'].mean())}%")
+            c4.metric("Particle B", f"{fmt(df_clean['Finish Particle B'].mean())}")
+            st.metric("Produksi Line B", f"{ton_b:.0f} TON")
+
+        st.markdown("---")
+        st.subheader("📈 Grafik Tren Harian")
+        chart_data = df_clean.dropna(subset=["Jam"]).copy()
+        st.caption("1. Tren RM Rotary Moist (Input)")
+        st.line_chart(chart_data, x="Jam", y=["RM Rotary Moist A", "RM Rotary Moist B"], color=["#3498db", "#e74c3c"])
+        st.caption("3. Tren Finish Product Moist (Output)")
+        st.line_chart(chart_data, x="Jam", y=["Finish Moist A", "Finish Moist B"], color=["#2ecc71", "#f1c40f"])
+        
+        st.divider()
+        csv = df_clean.to_csv(index=False).encode('utf-8')
+        st.download_button("📥 Download Data Harian (CSV)", csv, f'laporan_{pilihan_bulan}_{pilihan_sheet}.csv', 'text/csv')
+
+        st.subheader("🔍 Quality Control Data Check (🚦)")
+        def qc(row):
+            s = [''] * len(row)
+            for c in ["Rotary Moist A", "Rotary Moist B"]:
+                if c in df_clean.columns and pd.notnull(row[c]):
+                    try:
+                        v = float(row[c])
+                        i = df_clean.columns.get_loc(c)
+                        if v>=16: s[i]='background-color:#ff4b4b;color:white;font-weight:bold;'
+                        elif v>=14: s[i]='background-color:#f1c40f;color:black;font-weight:bold;'
+                        else: s[i]='background-color:#2ecc71;color:black;font-weight:bold;'
+                    except: pass
+            return s
+        st.dataframe(df_clean.style.apply(qc, axis=1), use_container_width=True)
+
+    else:
+        # TAMPILAN JIKA SHEET TIDAK DITEMUKAN / SALAH TANGGAL
+        st.markdown(f"""
+        <div class="empty-state">
+            <h3>📂 SHEET TIDAK DITEMUKAN</h3>
+            <p>Sheet tanggal <b>{pilihan_sheet}</b> belum dibuat di Google Sheet (atau namanya berbeda).</p>
+            <p style="font-size:12px; color:#999;">
+            (Google mengembalikan data default/sheet pertama yang tidak cocok dengan permintaan).
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+
+except Exception as e:
+    st.error(f"Error: {str(e)}")
