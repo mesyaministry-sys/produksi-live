@@ -93,7 +93,7 @@ with c_logo:
 
 with c_judul:
     st.title("Monitoring Produksi BE")
-    st.caption("Created & Developer : Mahesya | 2026 🚦") 
+    st.caption("Created & Dev : Mahesya | 2026 🚦") 
 
 # 1. MENU SAMPING
 daftar_tanggal = [str(i) for i in range(1, 32)]
@@ -363,3 +363,4 @@ try:
 
 except Exception as e:
     st.error(f"Error: {str(e)}")
+
