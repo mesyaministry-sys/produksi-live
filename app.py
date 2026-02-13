@@ -28,10 +28,17 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 🔒 SISTEM KEAMANAN (LOGIN)
+# 🔒 SISTEM KEAMANAN (MENGAMBIL DARI SECRETS)
 # ==========================================
-USER_RAHASIA = "mahesya13"
-PASS_RAHASIA = "swasa226"
+# Script ini sekarang AMAN. Tidak ada password di sini.
+# Password diambil dari "Brankas" Streamlit Cloud.
+try:
+    USER_RAHASIA = st.secrets["credentials"]["username"]
+    PASS_RAHASIA = st.secrets["credentials"]["password"]
+except Exception as e:
+    st.error("❌ Gagal memuat password dari Secrets!")
+    st.info("Harap atur Secrets di Dashboard Streamlit Cloud terlebih dahulu.")
+    st.stop()
 
 def check_login():
     """Fungsi untuk memeriksa status login"""
