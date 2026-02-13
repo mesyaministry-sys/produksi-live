@@ -15,18 +15,37 @@ st.set_page_config(page_title="Monitoring Produksi BE", layout="wide", page_icon
 # ==========================================
 st.markdown("""
     <style>
+    /* Sembunyikan Menu Hamburger & Footer */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     header {visibility: hidden;}
     [data-testid="stToolbar"] {visibility: hidden;}
+    
+    /* Styling Pesan Error Validasi */
+    .validation-error {
+        padding: 20px;
+        background-color: #ffebee;
+        color: #c62828;
+        border: 1px solid #ef9a9a;
+        border-radius: 10px;
+        text-align: center;
+        font-weight: bold;
+        margin-bottom: 20px;
+    }
     </style>
 """, unsafe_allow_html=True)
 
 # ==========================================
 # 🔒 SISTEM KEAMANAN (LOGIN)
 # ==========================================
-USER_RAHASIA = "mahesya13"
-PASS_RAHASIA = "swasa226"
+# Mengambil User/Pass dari Secrets (Prioritas) atau Hardcode (Cadangan Aman)
+try:
+    USER_RAHASIA = st.secrets["credentials"]["username"]
+    PASS_RAHASIA = st.secrets["credentials"]["password"]
+except:
+    # Fallback jika secrets belum disetting, agar tidak error total
+    USER_RAHASIA = "mahesya13"
+    PASS_RAHASIA = "swasa226"
 
 def check_login():
     """Fungsi untuk memeriksa status login"""
@@ -35,16 +54,7 @@ def check_login():
 
     if not st.session_state["logged_in"]:
         st.markdown(
-            """
-            <style>
-            .login-container {
-                margin-top: 100px; padding: 40px; border-radius: 10px;
-                background-color: #f8f9fa; box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-                text-align: center; max-width: 400px; margin-left: auto; margin-right: auto;
-            }
-            .stTextInput > label {font-weight:bold; color:#2c3e50;}
-            </style>
-            """, unsafe_allow_html=True)
+            """<style>.login-container {margin-top: 100px; padding: 40px; border-radius: 10px; background-color: #f8f9fa; box-shadow: 0 4px 6px rgba(0,0,0,0.1); text-align: center; max-width: 400px; margin-left: auto; margin-right: auto;} .stTextInput > label {font-weight:bold; color:#2c3e50;}</style>""", unsafe_allow_html=True)
         
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
@@ -53,6 +63,7 @@ def check_login():
             st.caption("Monitoring Produksi BE")
             user_input = st.text_input("Username", key="user_input")
             pass_input = st.text_input("Password", type="password", key="pass_input")
+            
             if st.button("LOGIN", type="primary", use_container_width=True):
                 if user_input == USER_RAHASIA and pass_input == PASS_RAHASIA:
                     st.session_state["logged_in"] = True
@@ -81,11 +92,10 @@ DAFTAR_FILE = {
 # 🖼️ HEADER
 c_logo, c_judul = st.columns([1, 5]) 
 with c_logo:
-    try:
-        st.image("logo_swasa.png.png", width=160) 
+    try: st.image("logo_swasa.png.png", width=160) 
     except:
         try: st.image("logo_swasa.png", width=160)
-        except: st.caption("Logo Placeholder")
+        except: st.caption("")
 
 with c_judul:
     st.title("Monitoring Produksi BE")
@@ -127,66 +137,74 @@ url = f'https://docs.google.com/spreadsheets/d/{SHEET_ID_AKTIF}/gviz/tq?tqx=out:
 try:
     df_raw = pd.read_csv(url, header=None, dtype=str, keep_default_na=False)
 
-    # --- 👮‍♂️ HEADER POLICE (VALIDASI BULAN) ---
-    # Fitur ini mengecek Header Excel (Baris 1-6). 
-    # Jika User pilih "Februari", tapi di Excel tertulis "Januari" (karena copy-paste), data dianggap KOSONG.
+    # ==========================================
+    # 👮‍♂️ FITUR BARU: POLISI BULAN (MONTH GUARD)
+    # ==========================================
+    # Mendeteksi jika header sheet masih pakai bulan lama
+    is_valid_month = True
+    detected_wrong_month = ""
     
-    # 1. Tentukan Bulan yang diharapkan (Dari Pilihan User)
-    bulan_dipilih = pilihan_bulan.split(" ")[0].upper() # Ambil "FEBRUARI" dari "Februari 2026"
+    # 1. Tentukan Bulan Target (Dari Pilihan User)
+    target_bulan_str = pilihan_bulan.split(" ")[0].upper() # Ambil "FEBRUARI"
     
-    # 2. Ambil Teks Header dari Excel
-    header_text = " ".join(df_raw.iloc[:6].astype(str).values.flatten()).upper()
-    
-    # 3. Logika Pengecekan
-    data_valid = True
-    pesan_error = ""
-    
-    # Dictionary Bulan untuk cross-check
-    cek_bulan = {
-        "JANUARI": ["JANUARI", "JANUARY", "JAN-"],
-        "FEBRUARI": ["FEBRUARI", "FEBRUARY", "FEB-"],
-        "MARET": ["MARET", "MARCH", "MAR-"],
-        "APRIL": ["APRIL", "APR-"],
-        "MEI": ["MEI", "MAY"],
-        "JUNI": ["JUNI", "JUNE", "JUN-"],
-        "JULI": ["JULI", "JULY", "JUL-"],
-        "AGUSTUS": ["AGUSTUS", "AUGUST", "AUG-"],
-        "SEPTEMBER": ["SEPTEMBER", "SEP-"],
-        "OKTOBER": ["OKTOBER", "OCTOBER", "OCT-"],
-        "NOVEMBER": ["NOVEMBER", "NOV-"],
-        "DESEMBER": ["DESEMBER", "DECEMBER", "DEC-"]
+    # Mapping Keyword Bulan (Indo & English)
+    bulan_keywords = {
+        "JANUARI": ["JAN-", "JAN ", "JANUARI", "JANUARY"],
+        "FEBRUARI": ["FEB-", "FEB ", "FEBRUARI", "FEBRUARY"],
+        "MARET": ["MAR-", "MAR ", "MARET", "MARCH"],
+        "APRIL": ["APR-", "APR ", "APRIL"],
+        "MEI": ["MAY", "MEI"],
+        "JUNI": ["JUN-", "JUN ", "JUNI", "JUNE"],
+        "JULI": ["JUL-", "JUL ", "JULI", "JULY"],
+        "AGUSTUS": ["AUG-", "AUG ", "AGUSTUS", "AUGUST"],
+        "SEPTEMBER": ["SEP-", "SEP ", "SEPTEMBER"],
+        "OKTOBER": ["OCT-", "OKT ", "OKTOBER", "OCTOBER"],
+        "NOVEMBER": ["NOV-", "NOV ", "NOVEMBER"],
+        "DESEMBER": ["DEC-", "DES ", "DESEMBER", "DECEMBER"]
     }
 
-    # Jika bulan yang dipilih ada di kamus, kita cek konfliknya
-    if bulan_dipilih in cek_bulan:
-        keywords_bulan_ini = cek_bulan[bulan_dipilih]
-        
-        # Cek apakah Header mengandung Bulan yang SALAH?
-        # Misal: Pilih FEBRUARI, tapi header ada JANUARI
-        for bln, keys in cek_bulan.items():
-            if bln != bulan_dipilih: # Cek bulan-bulan lain
-                for k in keys:
-                    # Cek strict: pastikan ada spasi/batas biar tidak salah baca
-                    if f" {k} " in f" {header_text} " or f" {k}2" in f" {header_text} ":
-                        # OK, ketemu bulan lain (misal JANUARI).
-                        # Sekarang cek, apakah bulan yang BENAR (FEBRUARI) juga ada?
-                        # Kalau dua-duanya ada (misal periode Jan-Feb), kita loloskan.
-                        # Tapi kalau FEBRUARI TIDAK ADA, berarti ini FILE LAMA (Copyan).
-                        is_correct_month_present = any(bk in header_text for bk in keywords_bulan_ini)
+    # 2. Scan 5 Baris Pertama di Excel untuk cari Tanggal
+    header_area = df_raw.iloc[:10].astype(str).values.flatten()
+    header_text = " ".join(header_area).upper()
+    
+    # 3. Logika Pengecekan
+    # Jika kita pilih FEBRUARI, tapi di header ketemu "JAN-", maka itu data lama!
+    if target_bulan_str in bulan_keywords:
+        # Cek apakah ada keyword bulan LAIN yang muncul?
+        for bln, keywords in bulan_keywords.items():
+            if bln != target_bulan_str: # Jangan cek bulan target
+                for kw in keywords:
+                    # Cek presisi: spasi atau tanda strip agar tidak salah baca
+                    # Misal: "Date : 5-Jan" -> ada "JAN"
+                    if f"-{kw}" in header_text.replace(" ", "-") or f" {kw}" in header_text:
+                        # Ditemukan bulan salah!
+                        # Pastikan bulan yang BENAR tidak ada di situ (kalau dua-duanya ada, mungkin range)
+                        is_target_present = any(t_kw in header_text for t_kw in bulan_keywords[target_bulan_str])
                         
-                        if not is_correct_month_present:
-                            data_valid = False
-                            pesan_error = f"Header Excel terdeteksi bulan **{bln}**, padahal Anda memilih **{bulan_dipilih}**."
+                        if not is_target_present:
+                            is_valid_month = False
+                            detected_wrong_month = bln
                             break
-            if not data_valid: break
+            if not is_valid_month: break
 
-    # --- JIKA TIDAK VALID, KOSONGKAN DATAFRAME ---
-    if not data_valid:
-        df_clean = pd.DataFrame() # Kosongkan data
+    # ==========================================
+    
+    # JIKA BULAN SALAH (DATA HANTU), KOSONGKAN DATA
+    if not is_valid_month:
+        df_clean = pd.DataFrame()
+        st.markdown(f"""
+        <div class="validation-error">
+            <h3>⛔ DATA TIDAK VALID</h3>
+            <p>Anda membuka sheet tanggal <b>{pilihan_sheet}</b> di bulan <b>{target_bulan_str}</b>.</p>
+            <p>Namun, sistem mendeteksi data di dalam Excel masih milik bulan <b>{detected_wrong_month}</b>.</p>
+            <p><i>Kemungkinan Admin belum menghapus data bulan lalu di sheet ini.</i></p>
+        </div>
+        """, unsafe_allow_html=True)
+    
     else:
-        # Lanjut proses normal jika valid
+        # --- LANJUT PROSES NORMAL ---
         
-        # --- CARI JANGKAR (Jam 9:00) ---
+        # Cari Jangkar (Jam 9:00)
         idx_900 = 6 
         found_anchor = False
         scan_col = df_raw.iloc[:30, 0].astype(str)
@@ -195,9 +213,7 @@ try:
             idx_900 = matches[0]
             found_anchor = True
         else:
-            # Kalau tidak nemu jam 9:00, anggap kosong
-            df_clean = pd.DataFrame()
-            found_anchor = False
+            df_clean = pd.DataFrame() # Tidak ketemu jam 9, anggap kosong
 
         if found_anchor:
             # --- CARI PRODUK ---
@@ -313,6 +329,9 @@ try:
 
         st.divider()
         
+        # --- Helper Format Angka ---
+        def fmt(val): return f"{val:.2f}" if pd.notnull(val) else "-"
+
         rm_a = df_clean[df_clean["RM Rotary Moist A"] > 0]["RM Rotary Moist A"]
         rm_b = df_clean[df_clean["RM Rotary Moist B"] > 0]["RM Rotary Moist B"]
         avg_rm = pd.concat([rm_a, rm_b]).mean()
@@ -320,10 +339,6 @@ try:
         rot_b = df_clean[df_clean["Rotary Moist B"] > 0]["Rotary Moist B"]
         avg_rot = pd.concat([rot_a, rot_b]).mean()
         
-        # Helper untuk format angka (biar ga muncul nan%)
-        def fmt(val):
-            return f"{val:.2f}" if pd.notnull(val) else "-"
-
         m1, m2, m3 = st.columns(3)
         m1.metric("RM Rotary Moist (Avg)", f"{fmt(avg_rm)}%", "40 Max")
         m2.metric("Rotary Moist (Avg)", f"{fmt(avg_rot)}%", "12-15")
@@ -360,7 +375,7 @@ try:
         
         st.divider()
         
-        # --- DOWNLOAD & TABEL ---
+        # --- DOWNLOAD & TABEL (TRAFFIC LIGHT) ---
         csv = df_clean.to_csv(index=False).encode('utf-8')
         st.download_button(
             label="📥 Download Data Harian (CSV)",
@@ -374,7 +389,7 @@ try:
         
         def qc_highlight(row):
             styles = [''] * len(row)
-            # Logic warna sama seperti sebelumnya...
+            # Logic warna
             for col in ["Rotary Moist A", "Rotary Moist B"]:
                 if col in df_clean.columns and pd.notnull(row[col]):
                     try:
@@ -407,11 +422,8 @@ try:
         st.dataframe(df_clean.style.apply(qc_highlight, axis=1), use_container_width=True)
 
     else:
-        # PESAN KALAU DATA KOSONG (ATAU DIBLOKIR KARENA BULAN SALAH)
+        # JIKA DATA KOSONG (ATAU DIBLOKIR)
         st.warning(f"⚠️ Data untuk tanggal **{pilihan_sheet} {pilihan_bulan}** Kosong atau Belum Diupdate.")
-        if not data_valid:
-            st.error(f"⛔ **PERINGATAN SISTEM:** {pesan_error}")
-            st.caption("Sistem mendeteksi Anda membuka file hasil copy-paste (template lama) yang judulnya belum diganti.")
 
 except Exception as e:
     st.error(f"Error: {str(e)}")
