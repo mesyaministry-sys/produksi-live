@@ -3,40 +3,99 @@ import pandas as pd
 import numpy as np
 import re
 import time 
-from PIL import Image # Library untuk gambar
+from PIL import Image 
 
 # ==========================================
-# ⚙️ KONFIGURASI DATABASE BULANAN
+# ⚙️ KONFIGURASI HALAMAN
 # ==========================================
+st.set_page_config(page_title="Monitoring Produksi BE", layout="wide", page_icon="🏭")
+
+# ==========================================
+# 🔒 SISTEM KEAMANAN (LOGIN)
+# ==========================================
+USER_RAHASIA = "mahesya13"
+PASS_RAHASIA = "swasa226"
+
+def check_login():
+    """Fungsi untuk memeriksa status login"""
+    if "logged_in" not in st.session_state:
+        st.session_state["logged_in"] = False
+
+    if not st.session_state["logged_in"]:
+        # Tampilan Kotak Login
+        st.markdown(
+            """
+            <style>
+            .login-container {
+                margin-top: 100px;
+                padding: 40px;
+                border-radius: 10px;
+                background-color: #f8f9fa;
+                box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+                text-align: center;
+                max-width: 400px;
+                margin-left: auto;
+                margin-right: auto;
+            }
+            .stTextInput > label {font-weight:bold; color:#2c3e50;}
+            </style>
+            """, unsafe_allow_html=True)
+        
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            st.markdown('<div class="login-container">', unsafe_allow_html=True)
+            st.markdown("### 🔒 RESTRICTED ACCESS")
+            st.caption("Monitoring Produksi BE")
+            
+            user_input = st.text_input("Username", key="user_input")
+            pass_input = st.text_input("Password", type="password", key="pass_input")
+            
+            if st.button("LOGIN", type="primary", use_container_width=True):
+                if user_input == USER_RAHASIA and pass_input == PASS_RAHASIA:
+                    st.session_state["logged_in"] = True
+                    st.rerun() # Refresh agar masuk ke dashboard
+                else:
+                    st.error("❌ Akses Ditolak!")
+            st.markdown('</div>', unsafe_allow_html=True)
+            
+        return False
+    else:
+        return True
+
+# JIKA BELUM LOGIN, STOP PROSES DI SINI
+if not check_login():
+    st.stop()
+
+# ==========================================
+# 🚀 MULAI KONTEN DASHBOARD (HANYA SETELAH LOGIN)
+# ==========================================
+
+# ⚙️ KONFIGURASI DATABASE BULANAN
 DAFTAR_FILE = {
     "Januari 2026": "1MQsvhmWmrGNtp3Txh07Z-88VfgEZTj_WBD5zLNs9GGY",  
-    "Februari 2026": "12ZVOHJf4pFImwP6W1iLZgBe56RvN1Q3a3BnKWcJeOys",             
-    "Maret 2026": "MASUKKAN_ID_SHEET_MARET_DISINI",                   
+    "Februari 2026": "12ZVOHJf4pFImwP6W1iLZgBe56RvN1Q3a3BnKWcJeOys",              
+    "Maret 2026": "MASUKKAN_ID_SHEET_MARET_DISINI",                    
 }
 
-st.set_page_config(page_title="Monitoring Produksi", layout="wide")
-
-# ==========================================
 # 🖼️ HEADER DENGAN LOGO
-# ==========================================
-# Membagi area atas jadi 2 kolom: Logo (Kecil) & Judul (Besar)
 c_logo, c_judul = st.columns([1, 5]) 
 
 with c_logo:
-    # Pastikan file 'logo_swasa.png' ada di folder yang sama!
-    # Jika tidak ada, script tidak akan error tapi logo tidak muncul.
     try:
+        # Menggunakan nama file sesuai script Bapak
         st.image("logo_swasa.png.png", width=160) 
     except:
-        st.caption("logo_swasa.png.png") # Placeholder jika gambar belum diupload
+        # Fallback jika nama file mungkin salah ketik di folder
+        try:
+            st.image("logo_swasa.png", width=160)
+        except:
+            st.caption("Logo Image Placeholder")
 
 with c_judul:
     st.title("Monitoring Produksi BE")
     st.caption("Created & Developer : Mahesya | 2026 🚦") 
 
-# ==========================================
 # 1. MENU SAMPING
-# ==========================================
 daftar_tanggal = [str(i) for i in range(1, 32)]
 
 with st.sidebar:
@@ -46,6 +105,7 @@ with st.sidebar:
     
     st.divider()
     st.subheader("📅 Periode Harian")
+    # Default index 9 artinya tanggal 10, bisa diubah sesuai kebutuhan
     pilihan_sheet = st.selectbox("Pilih Tanggal (Sheet):", daftar_tanggal, index=9) 
     
     auto_refresh = st.checkbox("🔄 Auto Refresh (60s)", value=False)
@@ -53,15 +113,19 @@ with st.sidebar:
     if st.button("🔄 Refresh Manual"):
         st.cache_data.clear()
         st.rerun()
+    
+    st.divider()
+    # Tombol Logout
+    if st.button("🔒 LOGOUT"):
+        st.session_state["logged_in"] = False
+        st.rerun()
 
     if auto_refresh:
         time.sleep(60) 
         st.cache_data.clear()
         st.rerun()
 
-# ==========================================
 # 2. PROSES DATA
-# ==========================================
 if "MASUKKAN_ID" in SHEET_ID_AKTIF or SHEET_ID_AKTIF == "":
     st.info(f"📁 Laporan untuk bulan **{pilihan_bulan}** belum dihubungkan.")
     st.stop()
@@ -71,7 +135,7 @@ url = f'https://docs.google.com/spreadsheets/d/{SHEET_ID_AKTIF}/gviz/tq?tqx=out:
 try:
     df_raw = pd.read_csv(url, header=None, dtype=str, keep_default_na=False)
 
-    # --- CARI JANGKAR ---
+    # --- CARI JANGKAR (Jam 9:00) ---
     idx_900 = 6 
     found_anchor = False
     scan_col = df_raw.iloc[:30, 0].astype(str)
@@ -93,6 +157,7 @@ try:
         if any(x in t.lower() for x in ["moisture", "particle", "mesh", "max", "min", "tonnage", "time"]): return False
         return True
 
+    # Scan Produk A (Kiri: Kolom 8,9,10)
     for r in range(idx_900, max(0, idx_900-4), -1):
         for c in [8, 9, 10]:
             val = df_raw.iloc[r, c]
@@ -100,6 +165,7 @@ try:
                 if any(char.isdigit() for char in str(val)): produk_a = str(val).strip(); break
         if produk_a != "-": break
 
+    # Scan Produk B (Kanan: Kolom 13,14,15)
     for r in range(idx_900, max(0, idx_900-4), -1):
         for c in [13, 14, 15]:
             val = df_raw.iloc[r, c]
@@ -125,7 +191,9 @@ try:
 
     # --- OLAH DATA ---
     idx_data_start = idx_900
+    # Cek apakah baris 9:00 berisi angka "8" (Shift sebelumnya) atau langsung data
     if "8" in str(df_raw.iloc[idx_900-1, 0]): idx_data_start = idx_900 - 1
+    
     df = df_raw.iloc[idx_data_start:].copy()
     df_clean = pd.DataFrame()
     
@@ -295,7 +363,3 @@ try:
 
 except Exception as e:
     st.error(f"Error: {str(e)}")
-
-
-
-
