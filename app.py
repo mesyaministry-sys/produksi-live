@@ -15,7 +15,7 @@ st.set_page_config(page_title="Monitoring Produksi BE", layout="wide", page_icon
 # ==========================================
 st.markdown("""
     <style>
-    /* Sembunyikan Menu & Footer */
+    /* Sembunyikan Menu Hamburger & Footer */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     header {visibility: hidden;}
@@ -23,29 +23,31 @@ st.markdown("""
     
     /* Box Merah untuk Error Validasi */
     .error-box {
-        padding: 20px;
+        padding: 30px;
         background-color: #ffebee;
         border: 2px solid #ef5350;
-        border-radius: 10px;
+        border-radius: 15px;
         color: #c62828;
         text-align: center;
         font-weight: bold;
         margin-bottom: 20px;
+        font-size: 18px;
     }
     .empty-state {
-        text-align: center; padding: 40px; background-color: #f8f9fa; 
-        border: 2px dashed #d1d8e0; border-radius: 15px; color: #7f8c8d;
+        text-align: center; padding: 50px; background-color: #f8f9fa; 
+        border: 2px dashed #d1d8e0; border-radius: 15px; color: #95a5a6;
     }
     </style>
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 🔒 SISTEM KEAMANAN (LOGIN)
+# 🔒 SISTEM KEAMANAN (LOGIN DARI SECRETS)
 # ==========================================
 try:
     USER_RAHASIA = st.secrets["credentials"]["username"]
     PASS_RAHASIA = st.secrets["credentials"]["password"]
 except:
+    # Cadangan jika secrets belum disetting (agar tidak error)
     USER_RAHASIA = "mahesya13"
     PASS_RAHASIA = "swasa226"
 
@@ -135,62 +137,78 @@ url = f'https://docs.google.com/spreadsheets/d/{SHEET_ID_AKTIF}/gviz/tq?tqx=out:
 try:
     df_raw = pd.read_csv(url, header=None, dtype=str, keep_default_na=False)
 
-    # ==========================================
-    # 🕵️‍♂️ ANTI-GHOST DATA (VALIDASI HEADER)
-    # ==========================================
-    # Fitur ini mendeteksi jika Admin lupa menghapus tanggal lama di Excel
-    is_data_valid = True
-    wrong_month_detected = ""
+    # =========================================================================
+    # 🕵️‍♂️ POLISI BULAN (MONTH VALIDATOR 2.0 - LEBIH PINTAR)
+    # =========================================================================
+    # Logic: Cari cell "DATE" di baris awal, baca isinya, bandingkan dengan bulan pilihan.
     
-    # 1. Ambil nama bulan yang dipilih user (Misal: FEBRUARI)
-    target_bulan = pilihan_bulan.split(" ")[0].upper()
+    is_valid_month = True
+    detected_wrong_month = None
     
-    # 2. Daftar "Musuh" (Keyword bulan yang TIDAK BOLEH ada)
-    # Jika pilih Februari, maka "Januari" atau "Jan" adalah musuh (berarti data lama).
-    forbidden_keywords = []
-    
-    if "FEBRUARI" in target_bulan: 
-        forbidden_keywords = ["JANUARI", "JAN-", "JAN ", "/01/"]
-        wrong_month_detected = "JANUARI"
-    elif "MARET" in target_bulan: 
-        forbidden_keywords = ["FEBRUARI", "FEB-", "FEB ", "/02/"]
-        wrong_month_detected = "FEBRUARI"
-    elif "APRIL" in target_bulan:
-        forbidden_keywords = ["MARET", "MAR-", "MAR ", "/03/"]
-        wrong_month_detected = "MARET"
-    # ... Dan seterusnya bisa ditambahkan ...
+    # 1. Mapping Bulan (Nama -> Angka)
+    month_map = {
+        "JANUARI": 1, "FEBRUARI": 2, "MARET": 3, "APRIL": 4, "MEI": 5, "JUNI": 6,
+        "JULI": 7, "AGUSTUS": 8, "SEPTEMBER": 9, "OKTOBER": 10, "NOVEMBER": 11, "DESEMBER": 12
+    }
+    # Ambil angka bulan yang dipilih user (Misal: FEBRUARI = 2)
+    target_month_name = pilihan_bulan.split(" ")[0].upper()
+    target_month_num = month_map.get(target_month_name, 0)
 
-    # 3. Scan Header Excel (10 Baris Pertama)
-    header_area = df_raw.iloc[:10].astype(str).values.flatten()
-    header_text = " ".join(header_area).upper()
+    # 2. Scan Baris 1-10 di Excel untuk cari kata "DATE" atau "TANGGAL"
+    header_rows = df_raw.iloc[:10, :5] # Scan area header kiri atas
     
-    # 4. Cek apakah ada Keyword Terlarang di Header?
-    # Dan PASTIKAN bulan yang benar TIDAK ADA (Kalau dua-duanya ada, mungkin valid).
-    for kw in forbidden_keywords:
-        if kw in header_text:
-            # Jika "JAN" ditemukan, cek apakah "FEB" juga ada?
-            # Ambil 3 huruf awal target (FEB)
-            target_short = target_bulan[:3] 
-            if target_short not in header_text:
-                is_data_valid = False
-                break
+    found_header_date = False
     
-    # Jika Data Tidak Valid (Ghost Data), Kosongkan DataFrame
-    if not is_data_valid:
-        df_clean = pd.DataFrame()
+    for idx, row in header_rows.iterrows():
+        row_str = " ".join(row.astype(str).values).upper()
+        
+        # Jika ketemu baris yang ada kata "DATE"
+        if "DATE" in row_str or "TANGGAL" in row_str:
+            found_header_date = True
+            
+            # Cek keyword bulan di baris tersebut (Misal: "4-FEB")
+            detected_num = 0
+            if "JAN" in row_str: detected_num = 1
+            elif "FEB" in row_str: detected_num = 2
+            elif "MAR" in row_str: detected_num = 3
+            elif "APR" in row_str: detected_num = 4
+            elif "MAY" in row_str or "MEI" in row_str: detected_num = 5
+            elif "JUN" in row_str: detected_num = 6
+            elif "JUL" in row_str: detected_num = 7
+            elif "AUG" in row_str or "AGU" in row_str: detected_num = 8
+            elif "SEP" in row_str: detected_num = 9
+            elif "OCT" in row_str or "OKT" in row_str: detected_num = 10
+            elif "NOV" in row_str: detected_num = 11
+            elif "DEC" in row_str or "DES" in row_str: detected_num = 12
+            
+            # 3. Bandingkan!
+            # Jika bulan terdeteksi (detected_num > 0) DAN tidak sama dengan target
+            if detected_num > 0 and detected_num != target_month_num:
+                is_valid_month = False
+                # Cari nama bulan salah untuk pesan error
+                for k, v in month_map.items():
+                    if v == detected_num: detected_wrong_month = k
+                break # Stop scanning, sudah ketahuan salah
+    
+    # =========================================================================
+
+    # JIKA DATA TERBUKTI HANTU (COPYAN BULAN LALU) -> BLOKIR
+    if not is_valid_month:
+        df_clean = pd.DataFrame() # Kosongkan data
         st.markdown(f"""
         <div class="error-box">
-            ⛔ DATA HANTU TERDETEKSI (GHOST DATA)<br>
-            <span style="font-size:14px; font-weight:normal;">
-            Anda memilih bulan <b>{target_bulan}</b>, tetapi File Excel sheet ini masih berisi Header Tanggal <b>{wrong_month_detected}</b>.<br>
-            <br>
-            <i>Kemungkinan Admin belum menghapus data lama (Copy-Paste) di sheet tanggal {pilihan_sheet} ini.</i>
+            ⛔ STOP! DATA TIDAK VALID (GHOST DATA)<br><br>
+            <span style="font-size:16px; font-weight:normal; color:#333;">
+            Anda sedang membuka Sheet Tanggal <b>{pilihan_sheet}</b> di Bulan <b>{target_month_name}</b>.<br>
+            Tetapi, file Excel mendeteksi Header Tanggal bulan <b>{detected_wrong_month}</b>.<br><br>
+            <i>Ini artinya Admin belum menghapus/update data bulan lalu di sheet ini.<br>
+            Sistem memblokir data agar Anda tidak melihat laporan yang salah.</i>
             </span>
         </div>
         """, unsafe_allow_html=True)
-
+    
     else:
-        # --- PROSES DATA NORMAL (JIKA VALID) ---
+        # --- LANJUT PROSES NORMAL (DATA VALID) ---
         
         # Cari Jangkar (Jam 9:00)
         idx_900 = 6 
@@ -201,7 +219,7 @@ try:
             idx_900 = matches[0]
             found_anchor = True
         else:
-            df_clean = pd.DataFrame() # Data Kosong
+            df_clean = pd.DataFrame() 
 
         if found_anchor:
             # Cari Produk
@@ -407,12 +425,12 @@ try:
         st.dataframe(df_clean.style.apply(qc_highlight, axis=1), use_container_width=True)
 
     else:
-        # Tampilan jika data benar-benar kosong (bukan karena diblokir)
-        if is_data_valid:
+        # Tampilan jika data benar-benar kosong (Belum ada jam 9 pagi)
+        if is_valid_month:
             st.markdown(f"""
             <div class="empty-state">
                 <h3>📂 DATA KOSONG</h3>
-                <p>Belum ada data inputan untuk tanggal <b>{pilihan_sheet} {pilihan_bulan}</b>.</p>
+                <p>Belum ada data inputan (Jam 09:00 belum diisi) untuk tanggal <b>{pilihan_sheet} {pilihan_bulan}</b>.</p>
             </div>
             """, unsafe_allow_html=True)
 
