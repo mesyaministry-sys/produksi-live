@@ -4,7 +4,6 @@ import numpy as np
 import re
 import time 
 from PIL import Image 
-from datetime import datetime
 
 # ==========================================
 # ⚙️ KONFIGURASI HALAMAN
@@ -20,9 +19,14 @@ st.markdown("""
     footer {visibility: hidden;}
     header {visibility: hidden;}
     [data-testid="stToolbar"] {visibility: hidden;}
-    .ghost-alert {
-        padding: 30px; background-color: #ffebee; border: 3px solid #ff5252;
-        border-radius: 15px; text-align: center; color: #b71c1c; font-weight: bold;
+    
+    .debug-box {
+        padding: 15px; background-color: #e3f2fd; border-left: 5px solid #2196f3;
+        margin-bottom: 20px; font-size: 14px; color: #0d47a1;
+    }
+    .error-box {
+        padding: 20px; background-color: #ffebee; border: 2px solid #ef5350;
+        border-radius: 10px; color: #c62828; text-align: center; font-weight: bold;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -34,15 +38,15 @@ try:
     USER_RAHASIA = st.secrets["credentials"]["username"]
     PASS_RAHASIA = st.secrets["credentials"]["password"]
 except:
-    USER_RAHASIA = ""
-    PASS_RAHASIA = ""
+    USER_RAHASIA = "mahesya13"
+    PASS_RAHASIA = "swasa226"
 
 def check_login():
     if "logged_in" not in st.session_state: st.session_state["logged_in"] = False
     if not st.session_state["logged_in"]:
         st.markdown("""<style>.login-container {margin-top: 100px; padding: 40px; border-radius: 10px; background-color: #f8f9fa; box-shadow: 0 4px 6px rgba(0,0,0,0.1); text-align: center; max-width: 400px; margin-left: auto; margin-right: auto;} .stTextInput > label {font-weight:bold; color:#2c3e50;}</style>""", unsafe_allow_html=True)
-        c1, c2, c3 = st.columns([1, 2, 1])
-        with c2:
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
             st.markdown('<div class="login-container">', unsafe_allow_html=True)
             st.markdown("### 🔒 RESTRICTED ACCESS")
             st.caption("Monitoring Produksi BE")
@@ -65,22 +69,18 @@ if not check_login(): st.stop()
 
 DAFTAR_FILE = {
     "Januari 2026": "1MQsvhmWmrGNtp3Txh07Z-88VfgEZTj_WBD5zLNs9GGY",  
-    "Februari 2026": "1YQYvaRZzVttXVmo4PkF-qHP_rdVUXBAej-ryxgqwb8c",              
+    "Februari 2026": "12ZVOHJf4pFImwP6W1iLZgBe56RvN1Q3a3BnKWcJeOys",              
     "Maret 2026": "MASUKKAN_ID_SHEET_MARET_DISINI",                    
 }
 
-# HEADER
 c_logo, c_judul = st.columns([1, 5]) 
 with c_logo:
     try: st.image("logo_swasa.png.png", width=160) 
-    except:
-        try: st.image("logo_swasa.png", width=160)
-        except: st.caption("")
+    except: st.caption("")
 with c_judul:
     st.title("Monitoring Produksi BE")
     st.caption("Created & Dev : Mahesya | 2026 🚦") 
 
-# SIDEBAR
 daftar_tanggal = [str(i) for i in range(1, 32)]
 with st.sidebar:
     st.header("🗂️ Menu Utama")
@@ -89,13 +89,16 @@ with st.sidebar:
     st.divider()
     st.subheader("📅 Periode Harian")
     pilihan_sheet = st.selectbox("Pilih Tanggal (Sheet):", daftar_tanggal, index=9) 
+    
+    # Checkbox Debug Mode (Untuk mengecek apa yang dibaca script)
+    show_debug = st.checkbox("🐞 Tampilkan Info Debug", value=False)
+    
     auto_refresh = st.checkbox("🔄 Auto Refresh (60s)", value=False)
     if st.button("🔄 Refresh Manual"): st.cache_data.clear(); st.rerun()
     st.divider()
     if st.button("🔒 LOGOUT"): st.session_state["logged_in"] = False; st.rerun()
     if auto_refresh: time.sleep(60); st.cache_data.clear(); st.rerun()
 
-# PROSES DATA
 if "MASUKKAN_ID" in SHEET_ID_AKTIF or SHEET_ID_AKTIF == "":
     st.info(f"📁 Laporan untuk bulan **{pilihan_bulan}** belum dihubungkan.")
     st.stop()
@@ -103,75 +106,69 @@ if "MASUKKAN_ID" in SHEET_ID_AKTIF or SHEET_ID_AKTIF == "":
 url = f'https://docs.google.com/spreadsheets/d/{SHEET_ID_AKTIF}/gviz/tq?tqx=out:csv&sheet={pilihan_sheet}'
 
 try:
-    # BACA RAW DATA
     df_raw = pd.read_csv(url, header=None, dtype=str, keep_default_na=False)
 
     # =========================================================================
-    # 🕵️‍♂️ GHOST DATA DETECTOR (ALGORITMA TANGGAL ABAD 21)
+    # 🕵️‍♂️ INTELLIGENT DATE VALIDATOR
     # =========================================================================
-    is_valid_data = True
-    detected_month_num = 0
+    is_month_match = True
+    detected_text = ""
     
-    # 1. Tentukan Angka Bulan Target (Februari = 2)
-    month_map = {"JANUARI": 1, "FEBRUARI": 2, "MARET": 3, "APRIL": 4, "MEI": 5, "JUNI": 6, "JULI": 7, "AGUSTUS": 8, "SEPTEMBER": 9, "OKTOBER": 10, "NOVEMBER": 11, "DESEMBER": 12}
-    target_month_name = pilihan_bulan.split(" ")[0] # "Februari"
-    target_month_num = month_map.get(target_month_name, 0)
-
-    # 2. SCANNING DATA 20 BARIS PERTAMA (Mencari Tanggal Nyasar)
-    # Kita ambil sampel area header
-    sample_area = df_raw.iloc[:20, :10].values.flatten()
+    # 1. Target Bulan (Apa yang dipilih user)
+    target_month_name = pilihan_bulan.split(" ")[0].upper() # "FEBRUARI"
     
-    for item in sample_area:
-        item_str = str(item).strip()
-        # Coba paksa konversi jadi tanggal
-        try:
-            # Pandas pintar, dia bisa baca "5-Jan", "2026-01-05", "Jan 5"
-            dt = pd.to_datetime(item_str, errors='coerce') 
-            if pd.notnull(dt):
-                # Jika ketemu tanggal, cek bulannya!
-                # Logika: Jika ketemu bulan 1 (Jan), padahal target 2 (Feb) -> ITU HANTU!
-                if dt.month != target_month_num:
-                    is_valid_data = False
-                    detected_month_num = dt.month
-                    break
-        except:
-            pass
+    # 2. Keywords Bulan Musuh (Apa yang TIDAK BOLEH ada)
+    # Jika pilih FEB, musuhnya JAN. Jika pilih MAR, musuhnya FEB.
+    enemy_month = ""
+    if "FEBRUARI" in target_month_name: enemy_month = "JAN"
+    elif "MARET" in target_month_name: enemy_month = "FEB"
+    elif "APRIL" in target_month_name: enemy_month = "MAR"
+    # ... dst
+    
+    # 3. Scan Header Excel (10 Baris Pertama) untuk mencari jejak tanggal
+    # Kita cari string yang mengandung nama bulan musuh
+    header_content = " ".join(df_raw.iloc[:10].astype(str).values.flatten()).upper()
+    
+    if enemy_month != "" and enemy_month in header_content:
+        # Bahaya: Ditemukan bulan musuh.
+        # Tapi tunggu, apakah bulan yang BENAR ada? (Misal range: 31 Jan - 1 Feb)
+        keyword_target_short = target_month_name[:3] # "FEB"
         
-        # Validasi tambahan untuk teks Indonesia (Pandas kadang ga baca "Januari")
-        if target_month_num == 2 and ("JAN" in item_str.upper() and "FEB" not in item_str.upper()):
-            is_valid_data = False; detected_month_num = 1; break
-        if target_month_num == 3 and ("FEB" in item_str.upper() and "MAR" not in item_str.upper()):
-            is_valid_data = False; detected_month_num = 2; break
+        if keyword_target_short not in header_content:
+            # Fix Salah: Ada JAN, tapi tidak ada FEB sama sekali.
+            is_month_match = False
+            detected_text = f"Ditemukan teks '{enemy_month}' di Excel, tapi tidak ada '{keyword_target_short}'."
 
-    # =========================================================================
-
-    if not is_valid_data:
-        # TAMPILKAN LAYAR MERAH JIKA DATA HANTU
-        wrong_month_name = [k for k, v in month_map.items() if v == detected_month_num]
-        wrong_month_label = wrong_month_name[0] if wrong_month_name else "LAMA"
-        
+    # TAMPILKAN DEBUGGER JIKA DICENTANG
+    if show_debug:
         st.markdown(f"""
-        <div class="ghost-alert">
-            <h1>⛔ DATA TIDAK VALID (ARSIP LAMA)</h1>
-            <p style="font-size:18px;">
-                Anda membuka menu <b>{target_month_name.upper()}</b>.<br>
-                Namun, Excel Sheet tanggal {pilihan_sheet} masih berisi data bulan <b>{wrong_month_label}</b>.
-            </p>
-            <hr>
-            <p style="font-size:14px;">
-                Sistem memblokir tampilan ini agar Anda tidak salah membaca data.<br>
-                Silakan hapus data lama di Google Sheet lalu klik Refresh.
-            </p>
+        <div class="debug-box">
+            <b>🐞 DEBUG INFO:</b><br>
+            - Anda Memilih: <b>{target_month_name}</b><br>
+            - Script Scan Header Excel: <i>{header_content[:200]}...</i><br>
+            - Status Validasi: <b>{'✅ COCOK' if is_month_match else '❌ TIDAK COCOK'}</b>
         </div>
         """, unsafe_allow_html=True)
-        
-        # Kosongkan Dataframe agar tidak diproses grafik
-        df_clean = pd.DataFrame()
 
+    # =========================================================================
+
+    if not is_month_match:
+        # BLOKIR DATA
+        df_clean = pd.DataFrame()
+        st.markdown(f"""
+        <div class="error-box">
+            ⛔ PERINGATAN: DATA TIDAK VALID<br><br>
+            <span style="font-size:14px; font-weight:normal; color:#333;">
+            Anda membuka Sheet tanggal <b>{pilihan_sheet}</b> di menu <b>{target_month_name}</b>.<br>
+            Namun, sistem mendeteksi Header Excel masih bertanggal Bulan Lalu.<br>
+            <b>(Data ini adalah sisa copy-paste yang belum diupdate/dihapus).</b><br><br>
+            👉 <i>Solusi: Ganti Tanggal di dalam file Excel menjadi {target_month_name}, atau Hapus isinya.</i>
+            </span>
+        </div>
+        """, unsafe_allow_html=True)
+    
     else:
-        # --- DATA VALID / KOSONG (LANJUT PROSES) ---
-        
-        # Cari Jangkar (Jam 9:00)
+        # --- PROSES DATA NORMAL ---
         idx_900 = 6 
         found_anchor = False
         scan_col = df_raw.iloc[:30, 0].astype(str)
@@ -180,7 +177,7 @@ try:
             idx_900 = matches[0]
             found_anchor = True
         else:
-            df_clean = pd.DataFrame() # Data Kosong
+            df_clean = pd.DataFrame()
 
         if found_anchor:
             # Cari Produk
@@ -386,11 +383,14 @@ try:
         st.dataframe(df_clean.style.apply(qc_highlight, axis=1), use_container_width=True)
 
     else:
-        # Jika Data Kosong (Beneran Kosong, bukan karena diblokir)
-        if is_valid_data:
-            st.warning(f"⚠️ Data untuk tanggal **{pilihan_sheet} {pilihan_bulan}** Kosong.")
+        # TAMPILAN JIKA KOSONG (KARENA VALID ATAU KARENA MEMANG KOSONG)
+        if is_month_match:
+            st.markdown(f"""
+            <div style="text-align:center; padding:30px; background-color:#f1f3f4; border-radius:10px;">
+                <h3>📂 DATA MASIH KOSONG</h3>
+                <p>Belum ada data inputan (Jam 09:00 belum diisi) untuk tanggal <b>{pilihan_sheet} {pilihan_bulan}</b>.</p>
+            </div>
+            """, unsafe_allow_html=True)
 
 except Exception as e:
     st.error(f"Error: {str(e)}")
-
-
