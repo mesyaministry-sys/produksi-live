@@ -1,35 +1,29 @@
 import streamlit as st
 import pandas as pd
-import re
-import time 
+import numpy as np
+import time
 
 # ==========================================
-# ⚙️ KONFIGURASI & STYLE
+# ⚙️ KONFIGURASI
 # ==========================================
 st.set_page_config(page_title="Monitoring Produksi BE", layout="wide", page_icon="🏭")
-
-st.markdown("""
-    <style>
-    #MainMenu {visibility: hidden;} footer {visibility: hidden;} header {visibility: hidden;}
-    [data-testid="stToolbar"] {visibility: hidden;}
-    .status-ok { background-color: #e8f5e9; padding: 15px; border-radius: 8px; color: #2e7d32; text-align: center; font-weight: bold; }
-    .status-err { background-color: #ffebee; padding: 15px; border-radius: 8px; color: #c62828; text-align: center; font-weight: bold; }
-    </style>
-""", unsafe_allow_html=True)
 
 # ==========================================
 # 🔒 LOGIN
 # ==========================================
-# Bypass login ribet untuk testing, pakai hardcode aman
-USER_RAHASIA = "mahesya13"
-PASS_RAHASIA = "swasa226"
+try:
+    USER_RAHASIA = st.secrets["credentials"]["username"]
+    PASS_RAHASIA = st.secrets["credentials"]["password"]
+except:
+    USER_RAHASIA = "mahesya13"
+    PASS_RAHASIA = "swasa226"
 
 if "logged_in" not in st.session_state: st.session_state["logged_in"] = False
 
 if not st.session_state["logged_in"]:
     c1, c2, c3 = st.columns([1, 2, 1])
     with c2:
-        st.info("🔒 SILAKAN LOGIN")
+        st.info("🔒 SYSTEM LOCKED")
         u = st.text_input("Username")
         p = st.text_input("Password", type="password")
         if st.button("LOGIN"):
@@ -40,127 +34,111 @@ if not st.session_state["logged_in"]:
     st.stop()
 
 # ==========================================
-# 📂 DATA SOURCE (ID FILE FEBRUARI BAPAK)
+# 📂 DATA SOURCE (1 FILE MASTER)
 # ==========================================
-SHEET_ID_FEB = "1YQYvaRZzVttXVmo4PkF-qHP_rdVUXBAej-ryxgqwb8c" # ID BARU
+# Masukkan ID File JANUARI (File Master) di sini
+# Pastikan Bapak sudah menggabungkan data Feb ke file ini dan RENAME sheetnya
+SHEET_ID_MASTER = "1MQsvhmWmrGNtp3Txh07Z-88VfgEZTj_WBD5zLNs9GGY"  
 
-DAFTAR_FILE = {
-    "Februari 2026": SHEET_ID_FEB,
-    "Januari 2026": "1MQsvhmWmrGNtp3Txh07Z-88VfgEZTj_WBD5zLNs9GGY",  
-}
-
-# SIDEBAR
+# ==========================================
+# 🎛️ SIDEBAR MENU
+# ==========================================
 with st.sidebar:
-    st.header("🎛️ MENU")
-    pilihan_bulan = st.selectbox("Pilih Bulan:", list(DAFTAR_FILE.keys()), index=0)
-    SHEET_ID_AKTIF = DAFTAR_FILE[pilihan_bulan]
+    st.header("🗂️ PILIH PERIODE")
+    
+    # 1. Pilih Bulan
+    bulan_opsi = {"JANUARI": "Jan", "FEBRUARI": "Feb", "MARET": "Mar", "APRIL": "Apr"}
+    pilih_bulan = st.selectbox("Bulan:", list(bulan_opsi.keys()))
+    suffix_bulan = bulan_opsi[pilih_bulan] # Contoh: "Feb"
+    
+    # 2. Pilih Tanggal
+    pilih_tgl = st.selectbox("Tanggal:", [str(i) for i in range(1, 32)], index=3)
+    
+    # 3. Konstruksi Nama Sheet (Otomatis)
+    # Target Nama Sheet: "4 Feb", "14 Jan"
+    target_sheet_name = f"{pilih_tgl} {suffix_bulan}"
     
     st.divider()
-    # Pilih Tanggal (Angka 1-31)
-    # Kita set default ke 4 agar langsung muncul data yang ada
-    tgl_pilihan = st.selectbox("Pilih Tanggal:", [str(i) for i in range(1, 32)], index=3) 
+    st.info(f"📂 Mencari Sheet: **{target_sheet_name}**")
     
-    st.divider()
     if st.button("🔄 REFRESH"): st.cache_data.clear(); st.rerun()
     if st.button("LOGOUT"): st.session_state["logged_in"] = False; st.rerun()
 
-# HEADER
-st.title(f"Laporan Harian: {tgl_pilihan} {pilihan_bulan}")
+# ==========================================
+# 🚀 HEADER & LOGIC
+# ==========================================
+st.title(f"Laporan: {target_sheet_name} 2026")
 
-# ==========================================
-# 📥 LOAD & VALIDASI DATA
-# ==========================================
-url = f'https://docs.google.com/spreadsheets/d/{SHEET_ID_AKTIF}/gviz/tq?tqx=out:csv&sheet={tgl_pilihan}'
+# LOAD DATA
+url = f'https://docs.google.com/spreadsheets/d/{SHEET_ID_MASTER}/gviz/tq?tqx=out:csv&sheet={target_sheet_name}'
 
 try:
-    # 1. BACA DATA DARI GOOGLE
+    # Coba baca data
     df_raw = pd.read_csv(url, header=None, dtype=str, keep_default_na=False)
-
-    # 2. VALIDASI KETAT: APAKAH INI SHEET YANG BENAR?
-    # Masalah: Minta Sheet 14 -> Dikasih Sheet 4 (Default)
-    # Solusi: Cek apakah angka "14" ada di Header Excel?
+    
+    # =========================================================
+    # 🕵️‍♂️ VALIDASI: APAKAH SHEET BENAR-BENAR ADA?
+    # =========================================================
+    # Google kadang mengembalikan sheet pertama (default) jika sheet yg diminta gak ada.
+    # Kita cek: Apakah di Header Excel ada tulisan Tanggal/Bulan yg sesuai?
     
     is_valid = False
     
-    # Ambil 15 baris pertama (Area Header)
-    header_text = " ".join(df_raw.iloc[:15].astype(str).values.flatten()).upper()
+    # Ambil 10 baris pertama header jadi satu string besar
+    header_text = " ".join(df_raw.iloc[:10].astype(str).values.flatten()).upper()
     
-    # Logika Pencocokan:
-    # Cari angka tanggal pilihan user (misal '14')
-    # Pastikan angka itu berdiri sendiri atau diikuti bulan (misal '14-FEB' atau 'DATE: 14')
-    # Regex \b = batas kata, supaya '4' tidak cocok dengan '14' atau '2024'
-    target_pattern = rf"\b0?{tgl_pilihan}[\s\-\/]" 
-    
-    # Cek Bulan juga (FEB)
-    bulan_singkat = pilihan_bulan[:3].upper() # FEB
-    
-    if re.search(target_pattern, header_text) and bulan_singkat in header_text:
+    # Cek 1: Apakah ada nama bulan yg diminta (misal "FEB") di header?
+    if suffix_bulan.upper() in header_text:
         is_valid = True
     else:
-        # Gagal Validasi (Salah Sambung dari Google)
-        is_valid = False
+        # Cek 2 (Cadangan): Jika user memberi nama sheet angka saja "4", 
+        # kita cek apakah angka "4" ada di header tanggal.
+        if f" {pilih_tgl} " in f" {header_text} " or f"-{pilih_tgl}-" in header_text:
+             # Tapi ini agak riskan, sebaiknya patokan nama bulan.
+             # Kita perketat: Kalau bulan SALAH (misal minta FEB dikasih JAN), tolak.
+             if "JAN" in header_text and suffix_bulan.upper() == "FEB":
+                 is_valid = False
+             else:
+                 is_valid = True
 
-    # ==========================================
-    # 📊 TAMPILKAN HASIL
-    # ==========================================
-    
+    # =========================================================
+
     if is_valid:
-        # --- JIKA DATA VALID (Sheet Ditemukan & Cocok) ---
-        
-        # Cari baris Jam 9:00 untuk mulai ambil data
+        # --- PROSES DATA ---
         idx_900 = -1
         col_jam = df_raw.iloc[:30, 0].astype(str)
         matches = col_jam[col_jam.str.contains(r"9[:\.]00", regex=True)]
         
         if not matches.empty:
             idx_900 = matches.index[0]
-            df_clean = df_raw.iloc[idx_900:].copy()
+            df = df_raw.iloc[idx_900:].copy()
             
-            # Helper Pembersih Angka
             def clean(x):
                 try: return float(str(x).replace(',', '.').strip())
                 except: return 0.0
 
-            # Hitung Total (Sesuaikan indeks kolom dengan format Bapak)
-            # Kolom 9 = Tonnage A, Kolom 14 = Tonnage B (Berdasarkan script sebelumnya)
-            ton_a = df_clean.iloc[:, 9].apply(clean).sum()
-            ton_b = df_clean.iloc[:, 14].apply(clean).sum()
+            # Mapping Kolom (Sesuaikan jika ada geser kolom)
+            # Asumsi: Kolom 9=Ton A, Kolom 14=Ton B
+            ton_a = df.iloc[:, 9].apply(clean).sum()
+            ton_b = df.iloc[:, 14].apply(clean).sum()
             total = ton_a + ton_b
             
-            rm_avg = df_clean.iloc[:, 1].apply(clean).mean()
-            rot_avg = df_clean.iloc[:, 2].apply(clean).mean()
-
-            # TAMPILAN DASHBOARD
-            st.markdown(f'<div class="status-ok">✅ DATA DITEMUKAN (Valid)</div>', unsafe_allow_html=True)
-            st.write("") # Spacer
-            
+            # TAMPILKAN
             c1, c2, c3 = st.columns(3)
-            c1.metric("RM Rotary Moist", f"{rm_avg:.2f}%")
-            c2.metric("Rotary Moist", f"{rot_avg:.2f}%")
-            c3.metric("Total Output", f"{total:,.0f} TON")
+            c1.metric("Line A", f"{ton_a:,.0f} T")
+            c2.metric("Line B", f"{ton_b:,.0f} T")
+            c3.metric("Total", f"{total:,.0f} T")
             
-            st.divider()
-            
-            # Tampilkan Tabel
-            st.subheader("📋 Tabel Detail")
-            st.dataframe(df_clean.iloc[:, :15].head(15), use_container_width=True)
+            st.dataframe(df.iloc[:, :15].head(10))
             
         else:
-            st.warning("⚠️ Header Tanggal Cocok, tapi tidak ada data Jam 9:00.")
-
+            st.warning(f"⚠️ Sheet '{target_sheet_name}' ditemukan, tapi data jam 9:00 belum diisi.")
+    
     else:
-        # --- JIKA DATA TIDAK VALID (Sheet Belum Ada) ---
-        # Ini tampilan yang Bapak inginkan untuk tanggal yang belum diinput
-        st.markdown(f"""
-        <div style="text-align:center; padding:40px; background-color:#f1f3f4; border-radius:10px;">
-            <h3 style="color:#7f8c8d;">📂 DATA BELUM TERSEDIA</h3>
-            <p>Sheet untuk tanggal <b>{tgl_pilihan} {pilihan_bulan}</b> belum dibuat di Google Sheet.</p>
-            <hr>
-            <p style="font-size:12px; color:#95a5a6;">
-            (Sistem memblokir data karena Google mengirim sheet default yang tidak sesuai permintaan).
-            </p>
-        </div>
-        """, unsafe_allow_html=True)
+        # TAMPILAN JIKA SHEET TIDAK ADA (ATAU SALAH KIRIM)
+        st.error(f"⛔ Data Kosong / Sheet '{target_sheet_name}' Belum Dibuat.")
+        st.caption("Pastikan nama Sheet di Excel sudah diganti jadi format 'Tanggal Bulan' (Contoh: 4 Feb).")
 
 except Exception as e:
-    st.error(f"Terjadi Kesalahan: {e}")
+    st.info(f"⚠️ Belum ada data untuk **{target_sheet_name}**.")
+    # Error biasanya muncul karena sheet tidak ditemukan sama sekali oleh Google
