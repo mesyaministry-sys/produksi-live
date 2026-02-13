@@ -11,7 +11,7 @@ from PIL import Image
 st.set_page_config(page_title="Monitoring Produksi BE", layout="wide", page_icon="🏭")
 
 # ==========================================
-# 🛡️ STEALTH MODE & STYLING
+# 🛡️ STYLE
 # ==========================================
 st.markdown("""
     <style>
@@ -19,15 +19,11 @@ st.markdown("""
     footer {visibility: hidden;}
     header {visibility: hidden;}
     [data-testid="stToolbar"] {visibility: hidden;}
-    
-    .error-box {
-        padding: 20px; background-color: #ffebee; border: 2px solid #ef5350;
-        border-radius: 10px; color: #c62828; text-align: center; font-weight: bold; margin-bottom: 20px;
+    .alert-box {
+        padding: 20px; border-radius: 10px; margin-bottom: 20px; text-align: center; font-weight: bold;
     }
-    .empty-state {
-        text-align: center; padding: 50px; background-color: #f8f9fa; 
-        border: 2px dashed #d1d8e0; border-radius: 15px; color: #95a5a6;
-    }
+    .alert-red { background-color: #ffebee; border: 2px solid #ef5350; color: #c62828; }
+    .alert-green { background-color: #e8f5e9; border: 1px solid #4caf50; color: #2e7d32; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -67,7 +63,7 @@ if not check_login(): st.stop()
 # 🚀 APLIKASI UTAMA
 # ==========================================
 
-# ID FILE (PASTIKAN ID FEBRUARI SUDAH BENAR SESUAI LINK TERAKHIR)
+# ID FILE TERBARU (Sesuai link Bapak yang terakhir)
 DAFTAR_FILE = {
     "Januari 2026": "1MQsvhmWmrGNtp3Txh07Z-88VfgEZTj_WBD5zLNs9GGY",  
     "Februari 2026": "1YQYvaRZzVttXVmo4PkF-qHP_rdVUXBAej-ryxgqwb8c", 
@@ -87,11 +83,15 @@ with c_judul:
 daftar_tanggal = [str(i) for i in range(1, 32)]
 with st.sidebar:
     st.header("🗂️ Menu Utama")
+    # Default ke Februari agar langsung kelihatan
     pilihan_bulan = st.selectbox("Pilih Bulan Laporan:", list(DAFTAR_FILE.keys()), index=1)
     SHEET_ID_AKTIF = DAFTAR_FILE[pilihan_bulan]
     st.divider()
     st.subheader("📅 Periode Harian")
-    pilihan_sheet = st.selectbox("Pilih Tanggal (Sheet):", daftar_tanggal, index=0) 
+    pilihan_sheet = st.selectbox("Pilih Tanggal (Sheet):", daftar_tanggal, index=4) # Default tgl 5
+    
+    # Debug Mode
+    debug = st.checkbox("🔍 Debug Mode", value=True)
     
     auto_refresh = st.checkbox("🔄 Auto Refresh (60s)", value=False)
     if st.button("🔄 Refresh Manual"): st.cache_data.clear(); st.rerun()
@@ -107,61 +107,61 @@ if "MASUKKAN_ID" in SHEET_ID_AKTIF or SHEET_ID_AKTIF == "":
 url = f'https://docs.google.com/spreadsheets/d/{SHEET_ID_AKTIF}/gviz/tq?tqx=out:csv&sheet={pilihan_sheet}'
 
 try:
-    # 1. BACA DATA
     df_raw = pd.read_csv(url, header=None, dtype=str, keep_default_na=False)
 
     # =========================================================================
-    # 🕵️‍♂️ SATPAM TANGGAL (DAY MATCHING) - SOLUSI FINAL
+    # 🕵️‍♂️ VALIDATOR STRICT: "CARI KATA 'DATE :'"
     # =========================================================================
-    # Masalah: Sheet "5" tidak ada -> Google kirim Sheet "1" (Default)
-    # Solusi: Baca angka tanggal di dalam Excel. Kalau beda dengan pilihan menu -> BLOKIR.
+    data_valid = False
+    detected_date = "Tidak Ditemukan"
+    raw_header_text = ""
     
-    is_valid_sheet = False
-    detected_date_in_excel = "Tidak Diketahui"
+    target_tgl = str(pilihan_sheet) # "5"
     
-    # Target Tanggal (Apa yang dipilih user) -> Misal "5"
-    target_day = str(pilihan_sheet) 
-    
-    # Scan 20 Baris pertama, cari cell yang mengandung Format Tanggal
-    # Kita cari angka tanggal di area Header
-    header_area = df_raw.iloc[:20, :10].values.flatten()
-    
-    found_any_date_header = False
-    
-    for cell in header_area:
-        txt = str(cell).upper().strip()
+    # 1. Loop Baris per Baris (Cari baris yang ada kata "Date :")
+    # Kita hanya scan 10 baris pertama
+    for idx, row in df_raw.iloc[:10].iterrows():
+        row_str = " ".join(row.astype(str).values).upper()
         
-        # Cek Keyword Tanggal/Date
-        if "DATE" in txt or "TANGGAL" in txt or "TGL" in txt:
-            found_any_date_header = True
+        if "DATE" in row_str:
+            # OK, ini baris tanggal. Sekarang cari isinya.
+            # Format di Excel: "Date :", "1-Feb" (di kolom sebelahnya)
+            # Gabungkan semua text di baris ini
+            full_row_text = row_str
+            raw_header_text = full_row_text # Simpan untuk debug
             
-            # Coba ambil Angka pertama yang muncul di string itu
-            # Misal: "Date : 4 Feb" -> Ambil "4"
-            match = re.search(r'\b(\d{1,2})\b', txt)
+            # Cari angka tanggal (1-31) yang diikuti nama bulan (JAN/FEB/etc)
+            # Regex: Cari angka, spasi/dash, lalu (JAN|FEB|...)
+            match = re.search(r'(\d{1,2})[\s-]*(JAN|FEB|MAR|APR|MAY|MEI|JUN|JUL|AUG|AGU|SEP|OCT|OKT|NOV|DEC|DES)', full_row_text)
+            
             if match:
-                detected_day = match.group(1)
-                detected_date_in_excel = detected_day
+                detected_day = match.group(1) # Angka tanggal (misal "1")
+                detected_month = match.group(2) # Bulan (misal "FEB")
                 
-                # BANDINGKAN: Apakah angka di Excel == Angka di Menu?
-                if detected_day == target_day:
-                    is_valid_sheet = True
-                    break # Cocok! Keluar loop
-    
-    # Logic Darurat: Jika tidak ada kata "Date", tapi ada data produksi (jam 9),
-    # Kita asumsikan itu sheet default (Sheet 1) yang dikirim karena error.
-    # Jadi kita wajib curiga.
-    
-    # Jika kita pilih tanggal > 1 (misal 5), tapi header tidak ketemu/tidak cocok, blokir.
-    # Karena biasanya Google melempar ke Sheet 1.
-    if target_day != "1" and not is_valid_sheet:
-        # Extra Check: Apakah ini Sheet 1 yang nyasar?
-        # Kalau di header ada tulisan "1" atau "01", dan kita minta "5" -> REJECT
-        pass 
+                detected_date = f"{detected_day}-{detected_month}"
+                
+                # CEK KECOCOKAN
+                # Apakah angka yang ditemukan == Pilihan User?
+                if detected_day == target_tgl:
+                    data_valid = True
+                else:
+                    data_valid = False
+                
+                break # Sudah ketemu baris Date, berhenti scan.
 
     # =========================================================================
 
-    if is_valid_sheet:
-        # --- PROSES DATA NORMAL ---
+    if debug:
+        if data_valid:
+            st.markdown(f'<div class="alert-box alert-green">✅ STATUS: OK (Data Cocok)<br>Excel: {detected_date} | Menu: Tgl {target_tgl}</div>', unsafe_allow_html=True)
+        else:
+            if detected_date == "Tidak Ditemukan":
+                 st.markdown(f'<div class="alert-box alert-red">⛔ STATUS: SHEET TIDAK DITEMUKAN<br>Google mengirim data default (Sheet 1/Lainnya) karena Sheet {target_tgl} tidak ada.</div>', unsafe_allow_html=True)
+            else:
+                 st.markdown(f'<div class="alert-box alert-red">⛔ STATUS: DATA SALAH SAMBUNG<br>Anda minta Tgl {target_tgl}, tapi Google kirim data Tgl {detected_date}.<br>(Kemungkinan Sheet {target_tgl} belum dibuat)</div>', unsafe_allow_html=True)
+
+    if data_valid:
+        # --- PROSES DATA SEPERTI BIASA ---
         idx_900 = 6 
         found_anchor = False
         scan_col = df_raw.iloc[:30, 0].astype(str)
@@ -253,9 +253,7 @@ try:
     # ==========================================
     # F. TAMPILAN DASHBOARD
     # ==========================================
-    
-    # Hanya Tampilkan Dashboard Jika Sheet Valid & Data Ada
-    if is_valid_sheet and not df_clean.empty:
+    if data_valid and not df_clean.empty:
         st.success(f"✅ Laporan: **{pilihan_bulan}** | Tanggal: **{pilihan_sheet}**")
         
         col_info_1, col_info_2 = st.columns(2)
@@ -322,14 +320,10 @@ try:
         st.dataframe(df_clean.style.apply(qc, axis=1), use_container_width=True)
 
     else:
-        # TAMPILAN JIKA SHEET TIDAK DITEMUKAN / SALAH TANGGAL
-        st.markdown(f"""
+        st.markdown("""
         <div class="empty-state">
-            <h3>📂 SHEET TIDAK DITEMUKAN</h3>
-            <p>Sheet tanggal <b>{pilihan_sheet}</b> belum dibuat di Google Sheet (atau namanya berbeda).</p>
-            <p style="font-size:12px; color:#999;">
-            (Google mengembalikan data default/sheet pertama yang tidak cocok dengan permintaan).
-            </p>
+            <h3>📂 DATA KOSONG / BELUM TERSEDIA</h3>
+            <p>Sheet untuk tanggal ini belum dibuat atau belum diisi.</p>
         </div>
         """, unsafe_allow_html=True)
 
