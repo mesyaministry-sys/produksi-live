@@ -34,8 +34,8 @@ try:
     USER_RAHASIA = st.secrets["credentials"]["username"]
     PASS_RAHASIA = st.secrets["credentials"]["password"]
 except:
-    USER_RAHASIA = "mahesya13"
-    PASS_RAHASIA = "swasa226"
+    USER_RAHASIA = ""
+    PASS_RAHASIA = ""
 
 def check_login():
     if "logged_in" not in st.session_state: st.session_state["logged_in"] = False
@@ -392,3 +392,4 @@ try:
 
 except Exception as e:
     st.error(f"Error: {str(e)}")
+
