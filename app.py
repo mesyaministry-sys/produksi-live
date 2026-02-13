@@ -38,8 +38,8 @@ try:
     USER_RAHASIA = st.secrets["credentials"]["username"]
     PASS_RAHASIA = st.secrets["credentials"]["password"]
 except:
-    USER_RAHASIA = "mahesya13"
-    PASS_RAHASIA = "swasa226"
+    USER_RAHASIA = ""
+    PASS_RAHASIA = ""
 
 def check_login():
     if "logged_in" not in st.session_state: st.session_state["logged_in"] = False
@@ -69,7 +69,7 @@ if not check_login(): st.stop()
 
 DAFTAR_FILE = {
     "Januari 2026": "1MQsvhmWmrGNtp3Txh07Z-88VfgEZTj_WBD5zLNs9GGY",  
-    "Februari 2026": "12ZVOHJf4pFImwP6W1iLZgBe56RvN1Q3a3BnKWcJeOys",              
+    "Februari 2026": "1YQYvaRZzVttXVmo4PkF-qHP_rdVUXBAej-ryxgqwb8c",              
     "Maret 2026": "MASUKKAN_ID_SHEET_MARET_DISINI",                    
 }
 
@@ -394,3 +394,4 @@ try:
 
 except Exception as e:
     st.error(f"Error: {str(e)}")
+
