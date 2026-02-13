@@ -11,10 +11,11 @@ from PIL import Image
 st.set_page_config(page_title="Monitoring Produksi BE", layout="wide", page_icon="🏭")
 
 # ==========================================
-# 🛡️ STEALTH MODE
+# 🛡️ STEALTH MODE (SEMBUNYIKAN MENU & GITHUB)
 # ==========================================
 st.markdown("""
     <style>
+    /* Sembunyikan Menu & Footer */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     header {visibility: hidden;}
@@ -30,6 +31,10 @@ st.markdown("""
         text-align: center;
         font-weight: bold;
         margin-bottom: 20px;
+    }
+    .empty-state {
+        text-align: center; padding: 40px; background-color: #f8f9fa; 
+        border: 2px dashed #d1d8e0; border-radius: 15px; color: #7f8c8d;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -133,52 +138,59 @@ try:
     # ==========================================
     # 🕵️‍♂️ ANTI-GHOST DATA (VALIDASI HEADER)
     # ==========================================
-    # Masalah: Sheet Februari hasil copy dari Januari. Isinya masih Januari.
-    # Solusi: Cek Header Baris 1-10. Jika User pilih "Februari", tapi Header ada tulisan "Jan", BLOKIR.
+    # Fitur ini mendeteksi jika Admin lupa menghapus tanggal lama di Excel
+    is_data_valid = True
+    wrong_month_detected = ""
     
-    # 1. Ambil Nama Bulan Target (Dari Pilihan User)
-    target_bulan_str = pilihan_bulan.split(" ")[0].upper() # "FEBRUARI"
+    # 1. Ambil nama bulan yang dipilih user (Misal: FEBRUARI)
+    target_bulan = pilihan_bulan.split(" ")[0].upper()
     
-    # 2. Tentukan Keyword "MUSUH" (Bulan sebelumnya yg mungkin tertinggal)
-    # Jika pilih FEBRUARI, musuhnya JANUARI. Jika MARET, musuhnya FEBRUARI.
-    bulan_musuh = ""
-    if "FEBRUARI" in target_bulan_str: bulan_musuh = "JAN"
-    elif "MARET" in target_bulan_str: bulan_musuh = "FEB"
-    elif "APRIL" in target_bulan_str: bulan_musuh = "MAR"
-    elif "MEI" in target_bulan_str: bulan_musuh = "APR"
-    elif "JUNI" in target_bulan_str: bulan_musuh = "MEI"
-    elif "JULI" in target_bulan_str: bulan_musuh = "JUN"
-    # ... dst
+    # 2. Daftar "Musuh" (Keyword bulan yang TIDAK BOLEH ada)
+    # Jika pilih Februari, maka "Januari" atau "Jan" adalah musuh (berarti data lama).
+    forbidden_keywords = []
+    
+    if "FEBRUARI" in target_bulan: 
+        forbidden_keywords = ["JANUARI", "JAN-", "JAN ", "/01/"]
+        wrong_month_detected = "JANUARI"
+    elif "MARET" in target_bulan: 
+        forbidden_keywords = ["FEBRUARI", "FEB-", "FEB ", "/02/"]
+        wrong_month_detected = "FEBRUARI"
+    elif "APRIL" in target_bulan:
+        forbidden_keywords = ["MARET", "MAR-", "MAR ", "/03/"]
+        wrong_month_detected = "MARET"
+    # ... Dan seterusnya bisa ditambahkan ...
 
     # 3. Scan Header Excel (10 Baris Pertama)
     header_area = df_raw.iloc[:10].astype(str).values.flatten()
     header_text = " ".join(header_area).upper()
     
-    is_ghost_data = False
+    # 4. Cek apakah ada Keyword Terlarang di Header?
+    # Dan PASTIKAN bulan yang benar TIDAK ADA (Kalau dua-duanya ada, mungkin valid).
+    for kw in forbidden_keywords:
+        if kw in header_text:
+            # Jika "JAN" ditemukan, cek apakah "FEB" juga ada?
+            # Ambil 3 huruf awal target (FEB)
+            target_short = target_bulan[:3] 
+            if target_short not in header_text:
+                is_data_valid = False
+                break
     
-    # Logic: Jika pilih FEB, tapi di header ada "JAN", dan TIDAK ADA "FEB", berarti itu file lama.
-    if bulan_musuh != "":
-        if bulan_musuh in header_text:
-            # Cek apakah bulan target ada?
-            keyword_target = target_bulan_str[:3] # Ambil 3 huruf awal (FEB)
-            if keyword_target not in header_text:
-                is_ghost_data = True
-
-    # Jika terdeteksi Data Hantu -> Kosongkan Dataframe
-    if is_ghost_data:
+    # Jika Data Tidak Valid (Ghost Data), Kosongkan DataFrame
+    if not is_data_valid:
         df_clean = pd.DataFrame()
         st.markdown(f"""
         <div class="error-box">
-            ⛔ DATA TIDAK VALID (GHOST DATA)<br>
+            ⛔ DATA HANTU TERDETEKSI (GHOST DATA)<br>
             <span style="font-size:14px; font-weight:normal;">
-            Anda memilih bulan <b>{target_bulan_str}</b>, tetapi data di Sheet Tanggal <b>{pilihan_sheet}</b><br>
-            masih berisi data bulan <b>{bulan_musuh}UARI</b> (Belum di-update/dihapus di Excel).
+            Anda memilih bulan <b>{target_bulan}</b>, tetapi File Excel sheet ini masih berisi Header Tanggal <b>{wrong_month_detected}</b>.<br>
+            <br>
+            <i>Kemungkinan Admin belum menghapus data lama (Copy-Paste) di sheet tanggal {pilihan_sheet} ini.</i>
             </span>
         </div>
         """, unsafe_allow_html=True)
-    
+
     else:
-        # --- PROSES DATA NORMAL ---
+        # --- PROSES DATA NORMAL (JIKA VALID) ---
         
         # Cari Jangkar (Jam 9:00)
         idx_900 = 6 
@@ -305,7 +317,6 @@ try:
 
         st.divider()
         
-        # Helper Format Angka
         def fmt(val): return f"{val:.2f}" if pd.notnull(val) else "-"
 
         rm_a = df_clean[df_clean["RM Rotary Moist A"] > 0]["RM Rotary Moist A"]
@@ -351,7 +362,6 @@ try:
         
         st.divider()
         
-        # --- DOWNLOAD & TABEL ---
         csv = df_clean.to_csv(index=False).encode('utf-8')
         st.download_button(
             label="📥 Download Data Harian (CSV)",
@@ -397,9 +407,14 @@ try:
         st.dataframe(df_clean.style.apply(qc_highlight, axis=1), use_container_width=True)
 
     else:
-        # Jika Dataframe Kosong (Entah karena belum update, atau diblokir polisi header)
-        if not is_ghost_data:
-            st.warning(f"⚠️ Data untuk tanggal **{pilihan_sheet} {pilihan_bulan}** Kosong.")
+        # Tampilan jika data benar-benar kosong (bukan karena diblokir)
+        if is_data_valid:
+            st.markdown(f"""
+            <div class="empty-state">
+                <h3>📂 DATA KOSONG</h3>
+                <p>Belum ada data inputan untuk tanggal <b>{pilihan_sheet} {pilihan_bulan}</b>.</p>
+            </div>
+            """, unsafe_allow_html=True)
 
 except Exception as e:
     st.error(f"Error: {str(e)}")
