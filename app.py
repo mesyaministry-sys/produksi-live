@@ -11,6 +11,23 @@ from PIL import Image
 st.set_page_config(page_title="Monitoring Produksi BE", layout="wide", page_icon="🏭")
 
 # ==========================================
+# 🛡️ STEALTH MODE (SEMBUNYIKAN MENU & GITHUB)
+# ==========================================
+st.markdown("""
+    <style>
+    /* Sembunyikan Menu Hamburger (Titik Tiga) */
+    #MainMenu {visibility: hidden;}
+    
+    /* Sembunyikan Footer (Made with Streamlit) */
+    footer {visibility: hidden;}
+    
+    /* Sembunyikan Header Bar (Tempat tombol GitHub & Deploy berada) */
+    header {visibility: hidden;}
+    [data-testid="stToolbar"] {visibility: hidden;}
+    </style>
+""", unsafe_allow_html=True)
+
+# ==========================================
 # 🔒 SISTEM KEAMANAN (LOGIN)
 # ==========================================
 USER_RAHASIA = "mahesya13"
@@ -363,4 +380,3 @@ try:
 
 except Exception as e:
     st.error(f"Error: {str(e)}")
-
