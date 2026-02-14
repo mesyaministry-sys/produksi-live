@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
 import re
 
 # ==========================================
@@ -8,7 +7,7 @@ import re
 # ==========================================
 st.set_page_config(page_title="Monitoring Produksi BE", layout="wide", page_icon="🏭")
 
-# ID FILE (PASTIKAN BENAR)
+# ID FILE (PASTIKAN TIDAK TERTUKAR)
 ID_JAN = "1MQsvhmWmrGNtp3Txh07Z-88VfgEZTj_WBD5zLNs9GGY" 
 ID_FEB = "1YQYvaRZzVttXVmo4PkF-qHP_rdVUXBAej-ryxgqwb8c"
 
@@ -18,13 +17,13 @@ DAFTAR_FILE = {
 }
 
 # ==========================================
-# 🛡️ STYLE
+# 🛡️ STYLE UI
 # ==========================================
 st.markdown("""
     <style>
     #MainMenu {visibility: hidden;} footer {visibility: hidden;} header {visibility: hidden;}
     .status-ok { background-color: #e8f5e9; color: #2e7d32; padding: 15px; border-radius: 10px; text-align: center; font-weight: bold;}
-    .status-err { background-color: #ffebee; color: #c62828; padding: 15px; border-radius: 10px; text-align: center; font-weight: bold;}
+    .status-empty { background-color: #f5f5f5; color: #757575; padding: 30px; border-radius: 10px; text-align: center; border: 2px dashed #bdbdbd;}
     </style>
 """, unsafe_allow_html=True)
 
@@ -32,13 +31,10 @@ st.markdown("""
 # 🔒 LOGIN
 # ==========================================
 if "logged_in" not in st.session_state: st.session_state["logged_in"] = False
-
 if not st.session_state["logged_in"]:
     st.warning("🔒 SYSTEM LOCKED")
-    c1, c2 = st.columns([2,1])
-    with c1:
-        u = st.text_input("Username")
-        p = st.text_input("Password", type="password")
+    u = st.text_input("Username")
+    p = st.text_input("Password", type="password")
     if st.button("LOGIN"):
         if u == "mahesya13" and p == "swasa226":
             st.session_state["logged_in"] = True
@@ -56,7 +52,8 @@ with st.sidebar:
     ACTIVE_ID = DAFTAR_FILE[pilih_bulan]
     
     # Pilih Tanggal (Format Angka 1-31)
-    pilih_tgl = st.selectbox("Pilih Tanggal:", [str(i) for i in range(1, 32)], index=3) # Default 4
+    # Default ke 4 (biar langsung kelihatan data kalau ada)
+    pilih_tgl = st.selectbox("Pilih Tanggal:", [str(i) for i in range(1, 32)], index=3) 
     
     st.divider()
     if st.button("🔄 REFRESH"): st.cache_data.clear(); st.rerun()
@@ -67,39 +64,51 @@ with st.sidebar:
 # ==========================================
 st.title(f"Laporan: Tanggal {pilih_tgl} {pilih_bulan}")
 
-# Nama Sheet murni Angka ("1", "2", "3") sesuai info Bapak
+# Nama sheet sesuai info Bapak (hanya angka)
 target_sheet = pilih_tgl 
 
 try:
     url = f'https://docs.google.com/spreadsheets/d/{ACTIVE_ID}/gviz/tq?tqx=out:csv&sheet={target_sheet}'
     
-    # BACA DATA (Skip bad lines biar gak crash)
+    # BACA DATA
     df_raw = pd.read_csv(url, header=None, dtype=str, keep_default_na=False, on_bad_lines='skip')
 
     # =========================================================
-    # 🕵️‍♂️ VALIDASI KETAT (BIAR GAK KETIPU GOOGLE)
+    # 🕵️‍♂️ VALIDASI PINTAR (ANTI-TIPU)
     # =========================================================
-    # Masalah: Minta sheet "14", dikasih sheet "1".
-    # Solusi: Cek Header Excel. Ada gak angka "14" di sana?
-    
     is_valid = False
-    header_text = " ".join(df_raw.iloc[:15].astype(str).values.flatten()).upper()
     
-    # Regex: Cari angka tanggal yg berdiri sendiri (misal "14")
-    # \b artinya batas kata. "4" tidak akan cocok dengan "14" atau "2024".
-    # Kita cari angka tanggal pilihan user di header.
-    if re.search(rf"\b0?{pilih_tgl}[\s\-\/]", header_text) or re.search(rf"TANGGAL\s*:\s*{pilih_tgl}\b", header_text):
-        # Tambahan: Cek Bulan (Opsional, tapi bagus buat safety)
-        if "JAN" in pilih_bulan.upper() and "JAN" in header_text: is_valid = True
-        elif "FEB" in pilih_bulan.upper() and ("FEB" in header_text or "DATE" in header_text): is_valid = True
-        else: is_valid = False # Bulan gak cocok
-    else:
-        is_valid = False # Angka tanggal gak ketemu di header
+    # Ambil 15 Baris Pertama (Header)
+    header_rows = df_raw.iloc[:15]
+    
+    # Kita cari kombinasi kata: "DATE" atau "TANGGAL" berdekatan dengan ANGKA TANGGAL
+    # Regex ini mencari: Kata (Date/Tgl/Tanggal) ... diikuti ... Angka Tanggal (misal 14)
+    # (?i) artinya huruf besar/kecil dianggap sama
+    
+    regex_pola = rf"(?i)(DATE|TGL|TANGGAL)[\s\S]{{0,30}}\b0?{pilih_tgl}\b"
+    
+    # Scan baris per baris biar lebih teliti
+    for idx, row in header_rows.iterrows():
+        row_text = " ".join(row.astype(str).values).upper()
+        
+        # 1. Cek apakah ada pola "Date ... 14"
+        if re.search(regex_pola, row_text):
+            is_valid = True
+            break
+            
+        # 2. Cek apakah ada pola "14-FEB" atau "14 FEB" (Khusus angka + nama bulan)
+        bulan_singkat = pilih_bulan[:3].upper() # JAN / FEB
+        regex_bulan = rf"\b0?{pilih_tgl}[\s\-]({bulan_singkat})"
+        if re.search(regex_bulan, row_text):
+            is_valid = True
+            break
 
     # =========================================================
 
     if is_valid:
-        # --- DATA BENAR ---
+        # --- JIKA LOLOS VALIDASI (SHEET BENAR) ---
+        
+        # Cari Jam 9:00
         col_jam = df_raw.iloc[:30, 0].astype(str)
         matches = col_jam[col_jam.str.contains(r"9[:\.]00", regex=True)]
         
@@ -111,7 +120,7 @@ try:
                 try: return float(str(x).replace(',', '.').strip())
                 except: return 0.0
 
-            # Cek Kelengkapan Kolom
+            # Cek apakah kolom cukup
             if df.shape[1] > 14:
                 ton_a = df.iloc[:, 9].apply(clean).sum()
                 ton_b = df.iloc[:, 14].apply(clean).sum()
@@ -120,9 +129,10 @@ try:
                 rm_avg = df.iloc[:, 1].apply(clean).mean()
                 rot_avg = df.iloc[:, 2].apply(clean).mean()
 
+                # TAMPILAN
                 st.markdown(f'<div class="status-ok">✅ DATA DITEMUKAN</div>', unsafe_allow_html=True)
                 st.write("")
-                
+
                 c1, c2, c3 = st.columns(3)
                 c1.metric("RM Moist", f"{rm_avg:.2f}%")
                 c2.metric("Rotary Moist", f"{rot_avg:.2f}%")
@@ -131,23 +141,24 @@ try:
                 st.divider()
                 st.dataframe(df.iloc[:, :15].head(15), use_container_width=True)
             else:
-                st.error("⚠️ Struktur Kolom Excel Tidak Sesuai.")
+                st.error("⚠️ Struktur Kolom Excel Tidak Sesuai (Kurang kolom).")
         else:
-            st.warning(f"⚠️ Sheet '{target_sheet}' ada, tapi Jam 9:00 belum diisi.")
+            st.info(f"⚠️ Sheet '{target_sheet}' Valid, tapi Jam 9:00 belum diisi.")
             
     else:
-        # --- DATA SALAH KIRIM / BELUM ADA ---
+        # --- JIKA TIDAK LOLOS (DATA HANTU / SHEET BELUM ADA) ---
         st.markdown(f"""
-        <div class="status-err">
-            📂 DATA BELUM TERSEDIA
+        <div class="status-empty">
+            <h3>📂 DATA BELUM TERSEDIA</h3>
+            <p>Sheet untuk tanggal <b>{pilih_tgl}</b> belum dibuat di Excel.</p>
         </div>
         """, unsafe_allow_html=True)
-        st.caption(f"Sheet untuk tanggal **{pilih_tgl}** belum dibuat/ditemukan di Excel {pilih_bulan}.")
 
 except Exception as e:
-    # Error Handler kalau sheet sama sekali gak ketemu
+    # Error Handler (Misal sheet beneran gak ada sama sekali di Google)
     st.markdown(f"""
-    <div class="status-err">
-        📂 DATA TIDAK DITEMUKAN
+    <div class="status-empty">
+        <h3>📂 DATA TIDAK DITEMUKAN</h3>
+        <p>Belum ada data untuk tanggal <b>{pilih_tgl}</b>.</p>
     </div>
     """, unsafe_allow_html=True)
