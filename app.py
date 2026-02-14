@@ -27,7 +27,7 @@ if not st.session_state['logged_in']:
         password = st.text_input("Password", type="password")
         
         if st.button("LOGIN MASUK"):
-            if username == "" and password == "":
+            if username == "mahesya13" and password == "swasa226":
                 st.session_state['logged_in'] = True
                 st.rerun()
             else:
@@ -334,7 +334,7 @@ try:
         )
 
         st.subheader("🔍 Quality Control Data Check (🚦)")
-        st.caption("Indikator : 🔴DANGER | 🔵MEDIUM | 🟢SAFE QUALITY | 🟡WARNING")
+        st.caption("INDIKATOR : 🔴DANGER | 🔵MEDIUM | 🟢SAFE QUALITY | 🟡WARNING")
         
         # ==========================================
         # 🚦 DEFINISI WARNA LAMPU QC (LENGKAP)
@@ -391,3 +391,4 @@ try:
 except Exception as e:
     # Tangkap error umum tapi tampilkan sebagai warning 'Belum terinput'
     st.warning(f"⚠️ Data belum terinput atau format belum sesuai.")
+
