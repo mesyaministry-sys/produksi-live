@@ -5,6 +5,38 @@ import re
 import time
 
 # ==========================================
+# ⚙️ KONFIGURASI HALAMAN
+# ==========================================
+st.set_page_config(page_title="Monitoring Produksi", layout="wide", page_icon="🏭")
+
+# ==========================================
+# 🔒 SISTEM LOGIN (KEAMANAN)
+# ==========================================
+if 'logged_in' not in st.session_state:
+    st.session_state['logged_in'] = False
+
+if not st.session_state['logged_in']:
+    # Tampilan Halaman Login
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        st.markdown("<br><br>", unsafe_allow_html=True)
+        st.markdown("### 🔒 PROTECTED ACCESS")
+        st.caption("Silakan login untuk mengakses Dashboard Monitoring Produksi.")
+        
+        username = st.text_input("Username")
+        password = st.text_input("Password", type="password")
+        
+        if st.button("LOGIN MASUK"):
+            if username == "" and password == "":
+                st.session_state['logged_in'] = True
+                st.rerun()
+            else:
+                st.error("Username atau Password Salah!")
+    
+    # Hentikan script di sini jika belum login
+    st.stop()
+
+# ==========================================
 # ⚙️ KONFIGURASI DATABASE BULANAN
 # ==========================================
 DAFTAR_FILE = {
@@ -13,11 +45,10 @@ DAFTAR_FILE = {
     "Maret 2026": "MASUKKAN_ID_SHEET_MARET_DISINI",                    
 }
 
-st.set_page_config(page_title="Monitoring Produksi", layout="wide")
-
 # ==========================================
-# 🔒 KEAMANAN TAMPILAN (HIDE MENU & FOOTER)
+# 🎨 TAMPILAN HEADER DENGAN LOGO
 # ==========================================
+# Menyembunyikan Menu Bawaan Streamlit agar bersih
 hide_streamlit_style = """
             <style>
             #MainMenu {visibility: hidden;}
@@ -29,12 +60,24 @@ hide_streamlit_style = """
             """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
-# JUDUL APLIKASI
-st.title("🏭 Monitoring Produksi Live")
-st.caption("Created & Dev : Mahesya | 2026 🚦") 
+# Layout Header: Logo di Kiri, Judul di Kanan
+col_logo, col_judul = st.columns([1, 6])
+
+with col_logo:
+    # Menampilkan Logo (Pastikan file ada di folder github)
+    try:
+        st.image("logo_swasa.png.png", width=110)
+    except:
+        st.warning("Logo not found")
+
+with col_judul:
+    st.title("Monitoring Produksi BE")
+    st.caption("Created & Dev : Mahesya | 2026 🚦") 
+
+st.divider()
 
 # ==========================================
-# 1. MENU SAMPING
+# 1. MENU SAMPING (SIDEBAR)
 # ==========================================
 daftar_tanggal = [str(i) for i in range(1, 32)]
 
@@ -45,7 +88,6 @@ with st.sidebar:
     
     st.divider()
     st.subheader("📅 Periode Harian")
-    # Default index diset ke tanggal hari ini (opsional) atau statis
     pilihan_sheet = st.selectbox("Pilih Tanggal (Sheet):", daftar_tanggal, index=9) 
     
     # FITUR AUTO REFRESH
@@ -53,6 +95,12 @@ with st.sidebar:
     
     if st.button("🔄 Refresh Manual"):
         st.cache_data.clear()
+        st.rerun()
+    
+    # Tombol Logout
+    st.markdown("---")
+    if st.button("🔒 LOGOUT"):
+        st.session_state['logged_in'] = False
         st.rerun()
 
     if auto_refresh:
@@ -71,11 +119,9 @@ url = f'https://docs.google.com/spreadsheets/d/{SHEET_ID_AKTIF}/gviz/tq?tqx=out:
 
 try:
     # A. BACA DATA RAW
-    # on_bad_lines='skip' mencegah error jika format csv berantakan saat proses input sedang berjalan
     try:
         df_raw = pd.read_csv(url, header=None, dtype=str, keep_default_na=False, on_bad_lines='skip')
     except Exception:
-        # Jika gagal baca CSV (misal sheet tidak ada), anggap data belum terinput
         st.warning(f"⚠️ Data belum terinput untuk Tanggal {pilihan_sheet} (Sheet tidak ditemukan).")
         st.stop()
 
@@ -97,8 +143,7 @@ try:
         idx_900 = matches[0]
         found_anchor = True
     else:
-        # MODIFIKASI: Jika jam 9:00 tidak ketemu, berarti format belum siap/data belum ada
-        st.warning(f"⚠️ Data belum terinput untuk Tanggal {pilihan_sheet} (Menunggu input Data Jam 09:00).")
+        st.warning(f"⚠️ Data belum terinput untuk Tanggal {pilihan_sheet} (Data Jam 09:00 belum masuk).")
         st.stop()
 
     # ==========================================
@@ -118,7 +163,7 @@ try:
     # Produk A
     for r in range(idx_900, max(0, idx_900-4), -1):
         for c in [8, 9, 10]:
-            if df_raw.shape[1] > c: # Safety check kolom
+            if df_raw.shape[1] > c:
                 val = df_raw.iloc[r, c]
                 if valid_prod(val):
                     if any(char.isdigit() for char in str(val)):
@@ -128,7 +173,7 @@ try:
     # Produk B
     for r in range(idx_900, max(0, idx_900-4), -1):
         for c in [13, 14, 15]:
-            if df_raw.shape[1] > c: # Safety check kolom
+            if df_raw.shape[1] > c:
                 val = df_raw.iloc[r, c]
                 if valid_prod(val):
                     if str(val).isupper():
@@ -159,7 +204,6 @@ try:
     df = df_raw.iloc[idx_data_start:].copy()
     df_clean = pd.DataFrame()
     
-    # Mapping Data (Menggunakan Try-Except per kolom untuk safety)
     try:
         df_clean["Jam"]               = df.iloc[:, 0] 
         df_clean["RM Rotary Moist A"] = df.iloc[:, 1]
@@ -173,7 +217,7 @@ try:
         df_clean["Finish Particle B"] = df.iloc[:, 13]
         df_clean["Tonnage B"]         = df.iloc[:, 14]
     except IndexError:
-        st.warning("⚠️ Data belum terinput lengkap (Struktur Kolom Excel belum sesuai).")
+        st.warning("⚠️ Data belum terinput lengkap (Kolom Excel belum sesuai).")
         st.stop()
 
     # Cleaning Angka
@@ -290,7 +334,7 @@ try:
         )
 
         st.subheader("🔍 Quality Control Data Check (🚦)")
-        st.caption("Indikator Particle: 🔴<75 | 🔵75-79.9 | 🟢80-88 | 🟡>88")
+        st.caption("Indikator : 🔴DANGER | 🔵MEDIUM | 🟢SAFE QUALITY | 🟡WARNING")
         
         # ==========================================
         # 🚦 DEFINISI WARNA LAMPU QC (LENGKAP)
@@ -346,5 +390,4 @@ try:
 
 except Exception as e:
     # Tangkap error umum tapi tampilkan sebagai warning 'Belum terinput'
-    # agar tidak terlihat seperti aplikasi rusak
     st.warning(f"⚠️ Data belum terinput atau format belum sesuai.")
