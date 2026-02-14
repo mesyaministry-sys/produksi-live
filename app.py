@@ -66,7 +66,7 @@ col_logo, col_judul = st.columns([1, 6])
 with col_logo:
     # Menampilkan Logo (Pastikan file ada di folder github)
     try:
-        st.image("logo_swasa.png.png", width=140)
+        st.image("logo_swasa.png.png", width=160)
     except:
         st.warning("Logo not found")
 
@@ -391,6 +391,7 @@ try:
 except Exception as e:
     # Tangkap error umum tapi tampilkan sebagai warning 'Belum terinput'
     st.warning(f"⚠️ Data belum terinput atau format belum sesuai.")
+
 
 
 
