@@ -150,7 +150,7 @@ try:
     # C. CARI PRODUK & FORMULA (DATA RAW PROCESSING)
     # ==========================================
     produk_a, produk_b = "-", "-"
-    f_bbku, f_bakar, f_loading = "-", "-", "-"
+    f_bbku, f_bakar, f_loading, f_remark = "-", "-", "-", "-" # <-- TAMBAHAN f_remark
 
     def valid_prod(val):
         t = str(val).strip()
@@ -183,17 +183,29 @@ try:
     if produk_a == "-": produk_a = "(Belum Diisi)"
     if produk_b == "-": produk_b = "(Kosong)"
 
-    # Formula
+    # Formula & Remark
     for i in range(25, min(60, len(df_raw))):
         row_txt = " ".join(df_raw.iloc[i].astype(str).values).upper().replace("_", " ").replace("  ", " ")
         if "BBKU" in row_txt and ":" in row_txt: f_bbku = row_txt.split(":")[-1].split("FORMULA")[0].strip()
         if "BAHAN BAKAR" in row_txt and ":" in row_txt: f_bakar = row_txt.split(":")[-1].split("LOADING")[0].strip()
         if "LOADING" in row_txt and ":" in row_txt: f_loading = row_txt.split(":")[-1].strip()
+        
+        # --- TAMBAHAN MENCARI CATATAN/REMARK ---
+        for j in range(df_raw.shape[1]):
+            cell_val = str(df_raw.iloc[i, j]).strip().upper()
+            if "CATATAN" in cell_val:
+                # Mengambil nilai tepat di bawah sel "Catatan"
+                if i + 1 < len(df_raw):
+                    val_below = str(df_raw.iloc[i+1, j]).strip()
+                    if val_below and val_below.upper() not in ["NAN", "NONE"]:
+                        f_remark = val_below
+                break
 
     for x in [f_bbku, f_bakar, f_loading]: x = x.replace("NAN", "").replace(",", "").strip()
     if len(f_bbku)<2: f_bbku="-"; 
     if len(f_bakar)<2: f_bakar="-"; 
     if len(f_loading)<2: f_loading="-"
+    if len(f_remark)<2: f_remark="-" # <-- TAMBAHAN filter remark kosong
 
     # ==========================================
     # D. DATA ANGKA
@@ -271,10 +283,12 @@ try:
         with col_info_1: st.markdown(f'<div class="card bg-blue"><div class="label">JENIS PRODUK A (KIRI)</div><div class="value">{produk_a}</div></div>', unsafe_allow_html=True)
         with col_info_2: st.markdown(f'<div class="card bg-red"><div class="label">JENIS PRODUK B (KANAN)</div><div class="value">{produk_b}</div></div>', unsafe_allow_html=True)
         
-        c1, c2, c3 = st.columns(3)
+        # --- TAMBAHAN: Diubah menjadi 4 kolom untuk menampung REMARK ---
+        c1, c2, c3, c4 = st.columns(4) 
         with c1: st.markdown(f'<div class="bg-dark" style="text-align:center;"><div class="label">FORMULA BBKU</div><div class="value-small">{f_bbku}</div></div>', unsafe_allow_html=True)
         with c2: st.markdown(f'<div class="bg-dark" style="text-align:center;"><div class="label">BAHAN BAKAR</div><div class="value-small">{f_bakar}</div></div>', unsafe_allow_html=True)
         with c3: st.markdown(f'<div class="bg-dark" style="text-align:center;"><div class="label">LOADING</div><div class="value-small">{f_loading}</div></div>', unsafe_allow_html=True)
+        with c4: st.markdown(f'<div class="bg-dark" style="text-align:center;"><div class="label">REMARK</div><div class="value-small">{f_remark}</div></div>', unsafe_allow_html=True)
 
         st.divider()
         
@@ -391,7 +405,3 @@ try:
 except Exception as e:
     # Tangkap error umum tapi tampilkan sebagai warning 'Belum terinput'
     st.warning(f"⚠️ Data belum terinput atau format belum sesuai.")
-
-
-
-
