@@ -73,7 +73,7 @@ with col_logo:
 
 with col_judul:
     st.title("MONITORING PRODUKSI BE")
-    st.caption("Created & Dev : Mahesya | 2026 🚦") 
+    st.caption("Dev : Mahesya | 2026 🚦") 
 
 st.divider()
 
@@ -406,6 +406,7 @@ try:
 except Exception as e:
     # Tangkap error umum tapi tampilkan sebagai warning 'Belum terinput'
     st.warning(f"⚠️ Data belum terinput atau format belum sesuai.")
+
 
 
 
