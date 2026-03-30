@@ -416,7 +416,8 @@ try:
                     try:
                         val = float(row[col])
                         idx = df_clean.columns.get_loc(col)
-                        if val > 15.0: styles[idx] = 'background-color: #ff4b4b; color: white; font-weight: bold;' # Merah
+                        # Kondisi baru ditambahkan di sini (val < 5.0)
+                        if val > 15.0 or val < 5.0: styles[idx] = 'background-color: #ff4b4b; color: white; font-weight: bold;' # Merah
                         else: styles[idx] = 'background-color: #2ecc71; color: black; font-weight: bold;' # Hijau
                     except: pass
 
