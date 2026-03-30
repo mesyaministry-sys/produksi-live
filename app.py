@@ -81,6 +81,8 @@ st.divider()
 # 1. MENU SAMPING (SIDEBAR)
 # ==========================================
 daftar_tanggal = [str(i) for i in range(1, 32)]
+# Menambahkan variasi tanggal seperti 28A jika dibutuhkan di pilihan sidebar
+daftar_tanggal.extend(["28A", "28B", "29A"]) 
 
 with st.sidebar:
     st.header("🗂️ Menu Utama")
@@ -150,8 +152,8 @@ try:
     # ==========================================
     # C. CARI PRODUK & FORMULA (DATA RAW PROCESSING)
     # ==========================================
-    produk_a, produk_b = "-", "-"
-    f_bbku, f_bakar, f_loading, f_remark = "-", "-", "-", "-" # <-- TAMBAHAN f_remark
+    produk_a, produk_b, produk_c = "-", "-", "-"
+    f_bbku, f_bakar, f_loading, f_remark = "-", "-", "-", "-" 
 
     def valid_prod(val):
         t = str(val).strip()
@@ -181,8 +183,19 @@ try:
                         produk_b = str(val).strip(); break
         if produk_b != "-": break
 
+    # Produk C
+    for r in range(idx_900, max(0, idx_900-4), -1):
+        for c in [18, 19, 20]:
+            if df_raw.shape[1] > c:
+                val = df_raw.iloc[r, c]
+                if valid_prod(val):
+                    if str(val).isupper() or any(char.isdigit() for char in str(val)):
+                        produk_c = str(val).strip(); break
+        if produk_c != "-": break
+
     if produk_a == "-": produk_a = "(Belum Diisi)"
     if produk_b == "-": produk_b = "(Kosong)"
+    if produk_c == "-": produk_c = "(Kosong)"
 
     # Formula & Remark
     for i in range(25, min(60, len(df_raw))):
@@ -191,11 +204,10 @@ try:
         if "BAHAN BAKAR" in row_txt and ":" in row_txt: f_bakar = row_txt.split(":")[-1].split("LOADING")[0].strip()
         if "LOADING" in row_txt and ":" in row_txt: f_loading = row_txt.split(":")[-1].strip()
         
-        # --- TAMBAHAN MENCARI CATATAN/REMARK ---
+        # Mencari Catatan/Remark
         for j in range(df_raw.shape[1]):
             cell_val = str(df_raw.iloc[i, j]).strip().upper()
             if "CATATAN" in cell_val:
-                # Mengambil nilai tepat di bawah sel "Catatan"
                 if i + 1 < len(df_raw):
                     val_below = str(df_raw.iloc[i+1, j]).strip()
                     if val_below and val_below.upper() not in ["NAN", "NONE"]:
@@ -203,10 +215,10 @@ try:
                 break
 
     for x in [f_bbku, f_bakar, f_loading]: x = x.replace("NAN", "").replace(",", "").strip()
-    if len(f_bbku)<2: f_bbku="-"; 
-    if len(f_bakar)<2: f_bakar="-"; 
+    if len(f_bbku)<2: f_bbku="-" 
+    if len(f_bakar)<2: f_bakar="-" 
     if len(f_loading)<2: f_loading="-"
-    if len(f_remark)<2: f_remark="-" # <-- TAMBAHAN filter remark kosong
+    if len(f_remark)<2: f_remark="-" 
 
     # ==========================================
     # D. DATA ANGKA
@@ -223,19 +235,33 @@ try:
         df_clean["Rotary Moist A"]    = df.iloc[:, 2]
         df_clean["RM Rotary Moist B"] = df.iloc[:, 4]
         df_clean["Rotary Moist B"]    = df.iloc[:, 5]
+        
         df_clean["Finish Moist A"]    = df.iloc[:, 7]
         df_clean["Finish Particle A"] = df.iloc[:, 8]
         df_clean["Tonnage A"]         = df.iloc[:, 9]
+        
         df_clean["Finish Moist B"]    = df.iloc[:, 12]
         df_clean["Finish Particle B"] = df.iloc[:, 13]
         df_clean["Tonnage B"]         = df.iloc[:, 14]
+
+        # Tambahan Kolom C
+        if df.shape[1] > 19:
+            df_clean["Finish Moist C"]    = df.iloc[:, 17]
+            df_clean["Finish Particle C"] = df.iloc[:, 18]
+            df_clean["Tonnage C"]         = df.iloc[:, 19]
+        else:
+            df_clean["Finish Moist C"]    = np.nan
+            df_clean["Finish Particle C"] = np.nan
+            df_clean["Tonnage C"]         = np.nan
+
     except IndexError:
-        st.warning("⚠️ Data belum terinput lengkap (Kolom Excel belum sesuai).")
+        st.warning("⚠️ Data belum terinput lengkap (Kolom Excel belum sesuai). Pastikan Sheet memiliki kolom produk C.")
         st.stop()
 
     # Cleaning Angka
     cols_angka = ["RM Rotary Moist A", "Rotary Moist A", "RM Rotary Moist B", "Rotary Moist B", 
-                  "Finish Moist A", "Finish Particle A", "Finish Moist B", "Finish Particle B"]
+                  "Finish Moist A", "Finish Particle A", "Finish Moist B", "Finish Particle B",
+                  "Finish Moist C", "Finish Particle C"]
     
     for c in cols_angka:
         df_clean[c] = df_clean[c].astype(str).str.replace(',', '.', regex=False)
@@ -259,7 +285,8 @@ try:
 
     total_ton_a = hitung_tonnage(df_clean["Tonnage A"])
     total_ton_b = hitung_tonnage(df_clean["Tonnage B"]) 
-    total_gabungan = total_ton_a + total_ton_b
+    total_ton_c = hitung_tonnage(df_clean["Tonnage C"]) 
+    total_gabungan = total_ton_a + total_ton_b + total_ton_c
 
     # ==========================================
     # E. TAMPILAN DASHBOARD
@@ -267,13 +294,14 @@ try:
     if not df_clean.empty:
         st.success(f"✅ Laporan: **{pilihan_bulan}** | Tanggal: **{pilihan_sheet}**")
         
-        # --- INFO ---
-        col_info_1, col_info_2 = st.columns(2)
+        # --- INFO KARTU PRODUK ---
+        col_info_1, col_info_2, col_info_3 = st.columns(3)
         st.markdown("""
         <style>
         .card { padding: 20px; border-radius: 12px; text-align: center; margin-bottom: 10px; color: white; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
         .bg-blue { background: linear-gradient(135deg, #3498db, #2980b9); }
         .bg-red { background: linear-gradient(135deg, #e74c3c, #c0392b); }
+        .bg-green { background: linear-gradient(135deg, #2ecc71, #27ae60); }
         .bg-dark { background-color: #2c3e50; border: 1px solid #34495e; padding: 15px; border-radius: 8px; }
         .label { font-size: 12px; text-transform: uppercase; letter-spacing: 1px; opacity: 0.8; margin-bottom: 5px; color: #ecf0f1; }
         .value { font-size: 24px; font-weight: 800; }
@@ -282,9 +310,10 @@ try:
         """, unsafe_allow_html=True)
 
         with col_info_1: st.markdown(f'<div class="card bg-blue"><div class="label">JENIS PRODUK A (KIRI)</div><div class="value">{produk_a}</div></div>', unsafe_allow_html=True)
-        with col_info_2: st.markdown(f'<div class="card bg-red"><div class="label">JENIS PRODUK B (KANAN)</div><div class="value">{produk_b}</div></div>', unsafe_allow_html=True)
+        with col_info_2: st.markdown(f'<div class="card bg-red"><div class="label">JENIS PRODUK B (TENGAH)</div><div class="value">{produk_b}</div></div>', unsafe_allow_html=True)
+        with col_info_3: st.markdown(f'<div class="card bg-green"><div class="label">JENIS PRODUK C (KANAN)</div><div class="value">{produk_c}</div></div>', unsafe_allow_html=True)
         
-        # --- TAMBAHAN: Diubah menjadi 4 kolom untuk menampung REMARK ---
+        # --- REMARK ---
         c1, c2, c3, c4 = st.columns(4) 
         with c1: st.markdown(f'<div class="bg-dark" style="text-align:center;"><div class="label">FORMULA BBKU</div><div class="value-small">{f_bbku}</div></div>', unsafe_allow_html=True)
         with c2: st.markdown(f'<div class="bg-dark" style="text-align:center;"><div class="label">BAHAN BAKAR</div><div class="value-small">{f_bakar}</div></div>', unsafe_allow_html=True)
@@ -305,12 +334,12 @@ try:
         m1, m2, m3 = st.columns(3)
         m1.metric("RM Rotary Moist (Avg)", f"{avg_rm:.2f}%", "40 Max")
         m2.metric("Rotary Moist (Avg)", f"{avg_rot:.2f}%", "12-15")
-        m3.metric("Total Output Harian", f"{total_gabungan:.0f} TON", "A + B")
+        m3.metric("Total Output Harian", f"{total_gabungan:.0f} TON", "A + B + C")
         
         st.markdown("---")
 
-        # --- DETAIL LINE ---
-        ca, cb = st.columns(2)
+        # --- DETAIL LINE (Disesuaikan jadi 3 kolom) ---
+        ca, cb, cc = st.columns(3)
         with ca:
             st.markdown(f"#### 🅰️ LINE A")
             c1, c2 = st.columns(2)
@@ -325,6 +354,13 @@ try:
             c4.metric("Particle B", f"{df_clean['Finish Particle B'].mean():.2f}")
             st.metric("Produksi Line B", f"{total_ton_b:.0f} TON")
 
+        with cc:
+            st.markdown(f"#### 🅲 LINE C")
+            c5, c6 = st.columns(2)
+            c5.metric("Moisture C", f"{df_clean['Finish Moist C'].mean():.2f}%")
+            c6.metric("Particle C", f"{df_clean['Finish Particle C'].mean():.2f}")
+            st.metric("Produksi Line C", f"{total_ton_c:.0f} TON")
+
         # --- GRAFIK ---
         st.markdown("---")
         st.subheader("📈 Grafik Tren Harian")
@@ -335,7 +371,8 @@ try:
         st.caption("2. Tren Rotary Moist (Process)")
         st.line_chart(chart_data, x="Jam", y=["Rotary Moist A", "Rotary Moist B"], color=["#9b59b6", "#34495e"])
         st.caption("3. Tren Finish Product Moist (Output)")
-        st.line_chart(chart_data, x="Jam", y=["Finish Moist A", "Finish Moist B"], color=["#2ecc71", "#f1c40f"])
+        # Tambahan Line C warna biru muda
+        st.line_chart(chart_data, x="Jam", y=["Finish Moist A", "Finish Moist B", "Finish Moist C"], color=["#2ecc71", "#f1c40f", "#3498db"])
         
         st.divider()
         
@@ -368,8 +405,8 @@ try:
                         else: styles[idx] = 'background-color: #2ecc71; color: black; font-weight: bold;' # Hijau
                     except: pass
 
-            # 2. FINISH MOIST (A & B)
-            for col in ["Finish Moist A", "Finish Moist B"]:
+            # 2. FINISH MOIST (A, B, C)
+            for col in ["Finish Moist A", "Finish Moist B", "Finish Moist C"]:
                 if col in df_clean.columns and pd.notnull(row[col]):
                     try:
                         val = float(row[col])
@@ -378,8 +415,8 @@ try:
                         else: styles[idx] = 'background-color: #2ecc71; color: black; font-weight: bold;' # Hijau
                     except: pass
 
-            # 3. PARTICLE SIZE (A & B) - NEW FITUR
-            for col in ["Finish Particle A", "Finish Particle B"]:
+            # 3. PARTICLE SIZE (A, B, C)
+            for col in ["Finish Particle A", "Finish Particle B", "Finish Particle C"]:
                 if col in df_clean.columns and pd.notnull(row[col]):
                     try:
                         val = float(row[col])
@@ -406,9 +443,3 @@ try:
 except Exception as e:
     # Tangkap error umum tapi tampilkan sebagai warning 'Belum terinput'
     st.warning(f"⚠️ Data belum terinput atau format belum sesuai.")
-
-
-
-
-
-
