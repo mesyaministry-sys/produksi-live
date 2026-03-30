@@ -10,6 +10,23 @@ import time
 st.set_page_config(page_title="Monitoring Produksi", layout="wide", page_icon="🏭")
 
 # ==========================================
+# 🚫 SEMBUNYIKAN ELEMEN STREAMLIT (MENU, GITHUB, FOOTER)
+# Dipindah ke atas agar berlaku di halaman Login juga
+# ==========================================
+hide_streamlit_style = """
+            <style>
+            #MainMenu {visibility: hidden;}
+            footer {visibility: hidden;}
+            header {visibility: hidden;}
+            [data-testid="stHeader"] {visibility: hidden;}
+            [data-testid="stToolbar"] {visibility: hidden;}
+            .stDeployButton {display:none;}
+            .reportview-container .main .block-container {padding-top: 1rem;}
+            </style>
+            """
+st.markdown(hide_streamlit_style, unsafe_allow_html=True)
+
+# ==========================================
 # 🔒 SISTEM LOGIN (KEAMANAN)
 # ==========================================
 if 'logged_in' not in st.session_state:
@@ -49,18 +66,6 @@ DAFTAR_FILE = {
 # ==========================================
 # 🎨 TAMPILAN HEADER DENGAN LOGO
 # ==========================================
-# Menyembunyikan Menu Bawaan Streamlit agar bersih
-hide_streamlit_style = """
-            <style>
-            #MainMenu {visibility: hidden;}
-            footer {visibility: hidden;}
-            header {visibility: hidden;}
-            [data-testid="stToolbar"] {visibility: hidden;}
-            .reportview-container .main .block-container {padding-top: 1rem;}
-            </style>
-            """
-st.markdown(hide_streamlit_style, unsafe_allow_html=True)
-
 # Layout Header: Logo di Kiri, Judul di Kanan
 col_logo, col_judul = st.columns([1, 6])
 
