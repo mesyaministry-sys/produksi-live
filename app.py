@@ -257,34 +257,41 @@ try:
         df_clean["Tonnage B"]         = df.iloc[:, 14]
         df_clean["Checker B"]         = df.iloc[:, 15] if df.shape[1] > 15 else np.nan
 
-        # Tambahan Kolom C & Remarks (PENYESUAIAN DI SINI)
+        # Tambahan Kolom C (Tanpa merusak struktur data lain)
         if df.shape[1] > 19:
             df_clean["Jam Finish C"]      = df.iloc[:, 16] if df.shape[1] > 16 else np.nan
             df_clean["Finish Moist C"]    = df.iloc[:, 17]
             df_clean["Finish Particle C"] = df.iloc[:, 18]
             df_clean["Tonnage C"]         = df.iloc[:, 19]
             df_clean["Checker C"]         = df.iloc[:, 20] if df.shape[1] > 20 else np.nan
-            
-            # Sapu bersih semua kolom dari indeks 21 sampai habis untuk area Remarks
-            if df.shape[1] > 21:
-                # Ambil semua data sisa, jadikan string, abaikan NaN
-                remarks_df = df.iloc[:, 21:].fillna("").astype(str)
-                # Gabungkan per baris: jika ada data di kolom 21, 22, 23 dst, satukan dengan spasi
-                df_clean["Remarks"] = remarks_df.apply(
-                    lambda row: " ".join([val.strip() for val in row if val.strip() and val.strip().lower() not in ['nan', 'none']]), 
-                    axis=1
-                )
-                # Rapikan yang kosong kembali menjadi NaN
-                df_clean["Remarks"] = df_clean["Remarks"].replace("", np.nan)
-            else:
-                df_clean["Remarks"] = np.nan
         else:
             df_clean["Jam Finish C"]      = np.nan
             df_clean["Finish Moist C"]    = np.nan
             df_clean["Finish Particle C"] = np.nan
             df_clean["Tonnage C"]         = np.nan
             df_clean["Checker C"]         = np.nan
-            df_clean["Remarks"]           = np.nan
+
+        # ==========================================
+        # PERUBAHAN UTAMA: TARIK DATA KHUSUS KOLOM Q (Baris 9 s/d 21)
+        # ==========================================
+        # Kolom Q = Indeks ke-16
+        if df_raw.shape[1] > 16:
+            # Mengambil spesifik indeks baris 8 hingga 20 (Excel baris 9 s/d 21)
+            remarks_q = df_raw.iloc[8:21, 16].astype(str)
+            # Bersihkan nilai nan, kosong, atau "None"
+            remarks_q = remarks_q.replace(r'^\s*$', np.nan, regex=True).replace(['nan', 'None'], np.nan)
+            
+            remarks_list = remarks_q.tolist()
+            
+            # Sesuaikan panjang remarks dengan jumlah baris di tabel QC
+            if len(remarks_list) < len(df_clean):
+                remarks_list.extend([np.nan] * (len(df_clean) - len(remarks_list)))
+            else:
+                remarks_list = remarks_list[:len(df_clean)]
+                
+            df_clean["Remarks"] = remarks_list
+        else:
+            df_clean["Remarks"] = np.nan
 
     except IndexError:
         st.warning("⚠️ Data belum terinput lengkap (Kolom Excel belum sesuai). Pastikan Sheet memiliki kolom produk C.")
