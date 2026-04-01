@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 import re
 import time
-import plotly.graph_objects as go # <-- Library untuk grafik elegan dan akurat
+import plotly.graph_objects as go # <-- Library untuk grafik elegan dan presisi
 
 # ==========================================
 # ⚙️ KONFIGURASI HALAMAN
@@ -16,12 +16,13 @@ st.set_page_config(page_title="Monitoring Produksi", layout="wide", page_icon="�
 # ==========================================
 hide_streamlit_style = """
             <style>
-            #MainMenu {visibility: hidden;}
-            footer {visibility: hidden;}
-            header {visibility: hidden;}
-            [data-testid="stHeader"] {visibility: hidden;}
-            [data-testid="stToolbar"] {visibility: hidden;}
-            .stDeployButton {display:none;}
+            #MainMenu {visibility: hidden !important;}
+            footer {visibility: hidden !important;}
+            header {visibility: hidden !important;}
+            [data-testid="stHeader"] {visibility: hidden !important;}
+            [data-testid="stToolbar"] {visibility: hidden !important;}
+            [data-testid="stDecoration"] {visibility: hidden !important;}
+            .stDeployButton {display: none !important;}
             .reportview-container .main .block-container {padding-top: 1rem;}
             </style>
             """
@@ -239,7 +240,6 @@ try:
         df_clean["RM Rotary Moist A"] = df.iloc[:, 1]
         df_clean["Rotary Moist A"]    = df.iloc[:, 2]
         
-        # Penambahan Jam Rotary B
         df_clean["Jam Rotary B"]      = df.iloc[:, 3] if df.shape[1] > 3 else np.nan
         df_clean["RM Rotary Moist B"] = df.iloc[:, 4]
         df_clean["Rotary Moist B"]    = df.iloc[:, 5]
@@ -381,63 +381,106 @@ try:
             st.metric("Produksi Line C", f"{total_ton_c:.0f} TON")
 
         # ==========================================
-        # 📈 GRAFIK TREN HARIAN (AKURAT & ELEGAN)
+        # 📈 GRAFIK TREN HARIAN (AKURAT & ELEGAN MENGGUNAKAN PLOTLY)
         # ==========================================
         st.markdown("---")
         st.subheader("📈 Grafik Tren Harian")
         chart_data = df_clean.copy()
 
-        # Bersihkan spasi kosong menjadi NaN agar garis grafik tidak terputus/turun nol
+        # Fungsi pintar untuk memproses string waktu agar presisi dan mengenali pergantian hari (midnight)
+        def parse_time_sequence(series):
+            s = series.astype(str).str.strip()
+            dt_list = []
+            base_date = pd.to_datetime('2000-01-01')
+            last_hour = None
+            
+            for val in s:
+                if val in ['', 'nan', 'None', 'NaN']:
+                    dt_list.append(pd.NaT)
+                    continue
+                    
+                match = re.search(r'(\d{1,2})[:\.](\d{2})', val)
+                if match:
+                    h, m = int(match.group(1)), int(match.group(2))
+                    
+                    # Jika jam anjlok drastis (contoh 23:00 ke 01:00), berarti sudah ganti hari
+                    if last_hour is not None and h < last_hour - 4:
+                        base_date += pd.Timedelta(days=1)
+                    
+                    try:
+                        dt = pd.Timestamp(year=base_date.year, month=base_date.month, day=base_date.day, hour=h, minute=m)
+                        dt_list.append(dt)
+                        last_hour = h
+                    except:
+                        dt_list.append(pd.NaT)
+                else:
+                    dt_list.append(pd.NaT)
+            return dt_list
+
+        # 1. Terapkan fungsi pembacaan waktu untuk setiap kolom Jam
         time_cols = ["Jam", "Jam Rotary B", "Jam Finish A", "Jam Finish B", "Jam Finish C"]
         for col in time_cols:
             if col in chart_data.columns:
-                chart_data[col] = chart_data[col].astype(str).replace(r'^\s*$', np.nan, regex=True).replace('nan', np.nan)
+                chart_data[f"{col}_dt"] = parse_time_sequence(chart_data[col])
 
-        # 1. TREN RM ROTARY MOIST
+        # 2. GRAFIK 1: TREN RM ROTARY MOIST
         fig_rm = go.Figure()
-        df_rm_a = chart_data.dropna(subset=['Jam', 'RM Rotary Moist A'])
-        fig_rm.add_trace(go.Scatter(x=df_rm_a['Jam'], y=df_rm_a['RM Rotary Moist A'], mode='lines+markers', name='RM Rotary A', line=dict(color='#3498db', width=3), marker=dict(size=8)))
+        df_rm_a = chart_data.dropna(subset=['Jam_dt', 'RM Rotary Moist A'])
+        if not df_rm_a.empty:
+            fig_rm.add_trace(go.Scatter(x=df_rm_a['Jam_dt'], y=df_rm_a['RM Rotary Moist A'], mode='lines+markers', name='RM Rotary A', line=dict(color='#3498db', width=3), marker=dict(size=8)))
         
-        df_rm_b = chart_data.dropna(subset=['Jam Rotary B', 'RM Rotary Moist B'])
-        fig_rm.add_trace(go.Scatter(x=df_rm_b['Jam Rotary B'], y=df_rm_b['RM Rotary Moist B'], mode='lines+markers', name='RM Rotary B', line=dict(color='#e74c3c', width=3), marker=dict(size=8)))
+        if 'Jam Rotary B_dt' in chart_data.columns:
+            df_rm_b = chart_data.dropna(subset=['Jam Rotary B_dt', 'RM Rotary Moist B'])
+            if not df_rm_b.empty:
+                fig_rm.add_trace(go.Scatter(x=df_rm_b['Jam Rotary B_dt'], y=df_rm_b['RM Rotary Moist B'], mode='lines+markers', name='RM Rotary B', line=dict(color='#e74c3c', width=3), marker=dict(size=8)))
         
-        fig_rm.update_layout(title="1. Tren RM Rotary Moist (Input)", xaxis_title="Waktu Spesifik", yaxis_title="Moisture (%)", hovermode="x unified", legend=dict(orientation="h", y=1.1, x=0), margin=dict(t=50, l=0, r=0, b=0))
+        fig_rm.update_layout(title="1. Tren RM Rotary Moist (Input)", xaxis_title="Jam Aktual", yaxis_title="Moisture (%)", hovermode="x unified", legend=dict(orientation="h", y=1.1, x=0), xaxis=dict(tickformat="%H:%M"))
 
-        # 2. TREN ROTARY MOIST (PROCESS)
+        # 3. GRAFIK 2: TREN ROTARY MOIST (PROCESS)
         fig_rot = go.Figure()
-        df_rot_a = chart_data.dropna(subset=['Jam', 'Rotary Moist A'])
-        fig_rot.add_trace(go.Scatter(x=df_rot_a['Jam'], y=df_rot_a['Rotary Moist A'], mode='lines+markers', name='Rotary A', line=dict(color='#9b59b6', width=3), marker=dict(size=8)))
+        df_rot_a = chart_data.dropna(subset=['Jam_dt', 'Rotary Moist A'])
+        if not df_rot_a.empty:
+            fig_rot.add_trace(go.Scatter(x=df_rot_a['Jam_dt'], y=df_rot_a['Rotary Moist A'], mode='lines+markers', name='Rotary A', line=dict(color='#9b59b6', width=3), marker=dict(size=8)))
         
-        df_rot_b = chart_data.dropna(subset=['Jam Rotary B', 'Rotary Moist B'])
-        fig_rot.add_trace(go.Scatter(x=df_rot_b['Jam Rotary B'], y=df_rot_b['Rotary Moist B'], mode='lines+markers', name='Rotary B', line=dict(color='#34495e', width=3), marker=dict(size=8)))
+        if 'Jam Rotary B_dt' in chart_data.columns:
+            df_rot_b = chart_data.dropna(subset=['Jam Rotary B_dt', 'Rotary Moist B'])
+            if not df_rot_b.empty:
+                fig_rot.add_trace(go.Scatter(x=df_rot_b['Jam Rotary B_dt'], y=df_rot_b['Rotary Moist B'], mode='lines+markers', name='Rotary B', line=dict(color='#34495e', width=3), marker=dict(size=8)))
         
-        fig_rot.update_layout(title="2. Tren Rotary Moist (Process)", xaxis_title="Waktu Spesifik", yaxis_title="Moisture (%)", hovermode="x unified", legend=dict(orientation="h", y=1.1, x=0), margin=dict(t=50, l=0, r=0, b=0))
+        fig_rot.update_layout(title="2. Tren Rotary Moist (Process)", xaxis_title="Jam Aktual", yaxis_title="Moisture (%)", hovermode="x unified", legend=dict(orientation="h", y=1.1, x=0), xaxis=dict(tickformat="%H:%M"))
 
-        # 3. TREN FINISH PRODUCT MOIST (OUTPUT)
+        # 4. GRAFIK 3: TREN FINISH PRODUCT MOIST (OUTPUT)
         fig_fin = go.Figure()
-        df_fin_a = chart_data.dropna(subset=['Jam Finish A', 'Finish Moist A'])
-        fig_fin.add_trace(go.Scatter(x=df_fin_a['Jam Finish A'], y=df_fin_a['Finish Moist A'], mode='lines+markers', name='Finish Moist A', line=dict(color='#2ecc71', width=3), marker=dict(size=8)))
+        if 'Jam Finish A_dt' in chart_data.columns:
+            df_fin_a = chart_data.dropna(subset=['Jam Finish A_dt', 'Finish Moist A'])
+            if not df_fin_a.empty:
+                fig_fin.add_trace(go.Scatter(x=df_fin_a['Jam Finish A_dt'], y=df_fin_a['Finish Moist A'], mode='lines+markers', name='Finish Moist A', line=dict(color='#2ecc71', width=3), marker=dict(size=8)))
         
-        df_fin_b = chart_data.dropna(subset=['Jam Finish B', 'Finish Moist B'])
-        fig_fin.add_trace(go.Scatter(x=df_fin_b['Jam Finish B'], y=df_fin_b['Finish Moist B'], mode='lines+markers', name='Finish Moist B', line=dict(color='#f1c40f', width=3), marker=dict(size=8)))
+        if 'Jam Finish B_dt' in chart_data.columns:
+            df_fin_b = chart_data.dropna(subset=['Jam Finish B_dt', 'Finish Moist B'])
+            if not df_fin_b.empty:
+                fig_fin.add_trace(go.Scatter(x=df_fin_b['Jam Finish B_dt'], y=df_fin_b['Finish Moist B'], mode='lines+markers', name='Finish Moist B', line=dict(color='#f1c40f', width=3), marker=dict(size=8)))
         
-        if 'Jam Finish C' in chart_data.columns and 'Finish Moist C' in chart_data.columns:
-            df_fin_c = chart_data.dropna(subset=['Jam Finish C', 'Finish Moist C'])
-            fig_fin.add_trace(go.Scatter(x=df_fin_c['Jam Finish C'], y=df_fin_c['Finish Moist C'], mode='lines+markers', name='Finish Moist C', line=dict(color='#3498db', width=3), marker=dict(size=8)))
-            
-        fig_fin.update_layout(title="3. Tren Finish Product Moist (Output)", xaxis_title="Waktu Spesifik", yaxis_title="Moisture (%)", hovermode="x unified", legend=dict(orientation="h", y=1.1, x=0), margin=dict(t=50, l=0, r=0, b=0))
+        if 'Jam Finish C_dt' in chart_data.columns:
+            df_fin_c = chart_data.dropna(subset=['Jam Finish C_dt', 'Finish Moist C'])
+            if not df_fin_c.empty:
+                fig_fin.add_trace(go.Scatter(x=df_fin_c['Jam Finish C_dt'], y=df_fin_c['Finish Moist C'], mode='lines+markers', name='Finish Moist C', line=dict(color='#3498db', width=3), marker=dict(size=8)))
+        
+        fig_fin.update_layout(title="3. Tren Finish Product Moist (Output)", xaxis_title="Jam Aktual", yaxis_title="Moisture (%)", hovermode="x unified", legend=dict(orientation="h", y=1.1, x=0), xaxis=dict(tickformat="%H:%M"))
 
-        # Render ketiga grafik menggunakan Plotly agar presisi
+        # Merender ketiga grafik
         for fig in [fig_rm, fig_rot, fig_fin]:
             fig.update_xaxes(showgrid=True, gridwidth=1, gridcolor='rgba(128,128,128,0.2)')
             fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor='rgba(128,128,128,0.2)')
+            # Membuat background grafik elegan transparan menyatu dengan tema dark/light Streamlit
+            fig.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', margin=dict(t=40, l=0, r=0, b=0))
             st.plotly_chart(fig, use_container_width=True)
             st.markdown("<br>", unsafe_allow_html=True)
         
         st.divider()
         
         # --- DOWNLOAD & TABEL ---
-        csv = df_clean.to_csv(index=False).encode('utf-8')
+        csv = df_clean.drop(columns=[c for c in df_clean.columns if "_dt" in c]).to_csv(index=False).encode('utf-8')
         st.download_button(
             label="📥 Download Data Harian (CSV)",
             data=csv,
@@ -472,6 +515,7 @@ try:
                         val = float(row[col])
                         idx = df_clean.columns.get_loc(col)
                         if val > 15.0 or val < 5.0: styles[idx] = 'background-color: #ff4b4b; color: white; font-weight: bold;' # Merah
+                        elif 13.51 <= val <= 15.00 or 5.00 <= val <= 7.99: styles[idx] = 'background-color: #f1c40f; color: black; font-weight: bold;' # Kuning
                         else: styles[idx] = 'background-color: #2ecc71; color: black; font-weight: bold;' # Hijau
                     except: pass
 
@@ -494,8 +538,9 @@ try:
 
             return styles
 
-        # Tampilkan tabel dengan Warna QC (Otomatis menyertakan kolom Paraph Checker dan Remarks)
-        st.dataframe(df_clean.style.apply(qc_highlight, axis=1), use_container_width=True)
+        # Tampilkan tabel dengan Warna QC, menyingkirkan kolom datetime bantuan
+        cols_to_show = [c for c in df_clean.columns if "_dt" not in c]
+        st.dataframe(df_clean[cols_to_show].style.apply(qc_highlight, axis=1), use_container_width=True)
 
     else:
         st.warning("⚠️ Data belum terinput.")
