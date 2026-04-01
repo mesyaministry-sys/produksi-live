@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import re
 import time
+import plotly.graph_objects as go # <-- Library untuk grafik elegan dan akurat
 
 # ==========================================
 # ⚙️ KONFIGURASI HALAMAN
@@ -237,10 +238,13 @@ try:
         df_clean["Jam"]               = df.iloc[:, 0] 
         df_clean["RM Rotary Moist A"] = df.iloc[:, 1]
         df_clean["Rotary Moist A"]    = df.iloc[:, 2]
+        
+        # Penambahan Jam Rotary B
+        df_clean["Jam Rotary B"]      = df.iloc[:, 3] if df.shape[1] > 3 else np.nan
         df_clean["RM Rotary Moist B"] = df.iloc[:, 4]
         df_clean["Rotary Moist B"]    = df.iloc[:, 5]
         
-        # Tambahan Pembacaan Jam Finish Product & Paraph Checker
+        # Pembacaan Jam Finish Product & Paraph Checker
         df_clean["Jam Finish A"]      = df.iloc[:, 6] if df.shape[1] > 6 else np.nan
         df_clean["Finish Moist A"]    = df.iloc[:, 7]
         df_clean["Finish Particle A"] = df.iloc[:, 8]
@@ -376,24 +380,59 @@ try:
             c6.metric("Particle C", f"{df_clean['Finish Particle C'].mean():.2f}")
             st.metric("Produksi Line C", f"{total_ton_c:.0f} TON")
 
-        # --- GRAFIK ---
+        # ==========================================
+        # 📈 GRAFIK TREN HARIAN (AKURAT & ELEGAN)
+        # ==========================================
         st.markdown("---")
         st.subheader("📈 Grafik Tren Harian")
-        chart_data = df_clean.dropna(subset=["Jam"]).copy()
+        chart_data = df_clean.copy()
 
-        # Membuat sumbu X gabungan untuk Finish Product (Memprioritaskan jam yang terisi di A, lalu B, lalu C)
-        chart_data['Jam Output'] = chart_data['Jam Finish A'].replace(r'^\s*$', np.nan, regex=True)\
-                                   .fillna(chart_data['Jam Finish B'].replace(r'^\s*$', np.nan, regex=True))\
-                                   .fillna(chart_data['Jam Finish C'].replace(r'^\s*$', np.nan, regex=True))\
-                                   .fillna(chart_data['Jam'])
+        # Bersihkan spasi kosong menjadi NaN agar garis grafik tidak terputus/turun nol
+        time_cols = ["Jam", "Jam Rotary B", "Jam Finish A", "Jam Finish B", "Jam Finish C"]
+        for col in time_cols:
+            if col in chart_data.columns:
+                chart_data[col] = chart_data[col].astype(str).replace(r'^\s*$', np.nan, regex=True).replace('nan', np.nan)
 
-        st.caption("1. Tren RM Rotary Moist (Input)")
-        st.line_chart(chart_data, x="Jam", y=["RM Rotary Moist A", "RM Rotary Moist B"], color=["#3498db", "#e74c3c"])
-        st.caption("2. Tren Rotary Moist (Process)")
-        st.line_chart(chart_data, x="Jam", y=["Rotary Moist A", "Rotary Moist B"], color=["#9b59b6", "#34495e"])
-        st.caption("3. Tren Finish Product Moist (Output)")
-        # Tambahan Line C warna biru muda dan menggunakan Jam Output
-        st.line_chart(chart_data, x="Jam Output", y=["Finish Moist A", "Finish Moist B", "Finish Moist C"], color=["#2ecc71", "#f1c40f", "#3498db"])
+        # 1. TREN RM ROTARY MOIST
+        fig_rm = go.Figure()
+        df_rm_a = chart_data.dropna(subset=['Jam', 'RM Rotary Moist A'])
+        fig_rm.add_trace(go.Scatter(x=df_rm_a['Jam'], y=df_rm_a['RM Rotary Moist A'], mode='lines+markers', name='RM Rotary A', line=dict(color='#3498db', width=3), marker=dict(size=8)))
+        
+        df_rm_b = chart_data.dropna(subset=['Jam Rotary B', 'RM Rotary Moist B'])
+        fig_rm.add_trace(go.Scatter(x=df_rm_b['Jam Rotary B'], y=df_rm_b['RM Rotary Moist B'], mode='lines+markers', name='RM Rotary B', line=dict(color='#e74c3c', width=3), marker=dict(size=8)))
+        
+        fig_rm.update_layout(title="1. Tren RM Rotary Moist (Input)", xaxis_title="Waktu Spesifik", yaxis_title="Moisture (%)", hovermode="x unified", legend=dict(orientation="h", y=1.1, x=0), margin=dict(t=50, l=0, r=0, b=0))
+
+        # 2. TREN ROTARY MOIST (PROCESS)
+        fig_rot = go.Figure()
+        df_rot_a = chart_data.dropna(subset=['Jam', 'Rotary Moist A'])
+        fig_rot.add_trace(go.Scatter(x=df_rot_a['Jam'], y=df_rot_a['Rotary Moist A'], mode='lines+markers', name='Rotary A', line=dict(color='#9b59b6', width=3), marker=dict(size=8)))
+        
+        df_rot_b = chart_data.dropna(subset=['Jam Rotary B', 'Rotary Moist B'])
+        fig_rot.add_trace(go.Scatter(x=df_rot_b['Jam Rotary B'], y=df_rot_b['Rotary Moist B'], mode='lines+markers', name='Rotary B', line=dict(color='#34495e', width=3), marker=dict(size=8)))
+        
+        fig_rot.update_layout(title="2. Tren Rotary Moist (Process)", xaxis_title="Waktu Spesifik", yaxis_title="Moisture (%)", hovermode="x unified", legend=dict(orientation="h", y=1.1, x=0), margin=dict(t=50, l=0, r=0, b=0))
+
+        # 3. TREN FINISH PRODUCT MOIST (OUTPUT)
+        fig_fin = go.Figure()
+        df_fin_a = chart_data.dropna(subset=['Jam Finish A', 'Finish Moist A'])
+        fig_fin.add_trace(go.Scatter(x=df_fin_a['Jam Finish A'], y=df_fin_a['Finish Moist A'], mode='lines+markers', name='Finish Moist A', line=dict(color='#2ecc71', width=3), marker=dict(size=8)))
+        
+        df_fin_b = chart_data.dropna(subset=['Jam Finish B', 'Finish Moist B'])
+        fig_fin.add_trace(go.Scatter(x=df_fin_b['Jam Finish B'], y=df_fin_b['Finish Moist B'], mode='lines+markers', name='Finish Moist B', line=dict(color='#f1c40f', width=3), marker=dict(size=8)))
+        
+        if 'Jam Finish C' in chart_data.columns and 'Finish Moist C' in chart_data.columns:
+            df_fin_c = chart_data.dropna(subset=['Jam Finish C', 'Finish Moist C'])
+            fig_fin.add_trace(go.Scatter(x=df_fin_c['Jam Finish C'], y=df_fin_c['Finish Moist C'], mode='lines+markers', name='Finish Moist C', line=dict(color='#3498db', width=3), marker=dict(size=8)))
+            
+        fig_fin.update_layout(title="3. Tren Finish Product Moist (Output)", xaxis_title="Waktu Spesifik", yaxis_title="Moisture (%)", hovermode="x unified", legend=dict(orientation="h", y=1.1, x=0), margin=dict(t=50, l=0, r=0, b=0))
+
+        # Render ketiga grafik menggunakan Plotly agar presisi
+        for fig in [fig_rm, fig_rot, fig_fin]:
+            fig.update_xaxes(showgrid=True, gridwidth=1, gridcolor='rgba(128,128,128,0.2)')
+            fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor='rgba(128,128,128,0.2)')
+            st.plotly_chart(fig, use_container_width=True)
+            st.markdown("<br>", unsafe_allow_html=True)
         
         st.divider()
         
@@ -455,12 +494,11 @@ try:
 
             return styles
 
-        # Tampilkan tabel dengan Warna QC (Sekarang akan otomatis menyertakan kolom Paraph Checker dan Remarks)
+        # Tampilkan tabel dengan Warna QC (Otomatis menyertakan kolom Paraph Checker dan Remarks)
         st.dataframe(df_clean.style.apply(qc_highlight, axis=1), use_container_width=True)
 
     else:
         st.warning("⚠️ Data belum terinput.")
 
 except Exception as e:
-    # Tangkap error umum tapi tampilkan sebagai warning 'Belum terinput'
     st.warning(f"⚠️ Data belum terinput atau format belum sesuai.")
