@@ -85,9 +85,8 @@ st.divider()
 # ==========================================
 # 1. MENU SAMPING (SIDEBAR)
 # ==========================================
+# Opsi variasi 28A, dll dihapus agar akurat 1-31
 daftar_tanggal = [str(i) for i in range(1, 32)]
-# Menambahkan variasi tanggal seperti 28A jika dibutuhkan di pilihan sidebar
-daftar_tanggal.extend(["28A", "28B", "29A"]) 
 
 with st.sidebar:
     st.header("🗂️ Menu Utama")
@@ -241,23 +240,34 @@ try:
         df_clean["RM Rotary Moist B"] = df.iloc[:, 4]
         df_clean["Rotary Moist B"]    = df.iloc[:, 5]
         
+        # Tambahan Pembacaan Jam Finish Product & Paraph Checker
+        df_clean["Jam Finish A"]      = df.iloc[:, 6] if df.shape[1] > 6 else np.nan
         df_clean["Finish Moist A"]    = df.iloc[:, 7]
         df_clean["Finish Particle A"] = df.iloc[:, 8]
         df_clean["Tonnage A"]         = df.iloc[:, 9]
+        df_clean["Checker A"]         = df.iloc[:, 10] if df.shape[1] > 10 else np.nan
         
+        df_clean["Jam Finish B"]      = df.iloc[:, 11] if df.shape[1] > 11 else np.nan
         df_clean["Finish Moist B"]    = df.iloc[:, 12]
         df_clean["Finish Particle B"] = df.iloc[:, 13]
         df_clean["Tonnage B"]         = df.iloc[:, 14]
+        df_clean["Checker B"]         = df.iloc[:, 15] if df.shape[1] > 15 else np.nan
 
-        # Tambahan Kolom C
+        # Tambahan Kolom C & Remarks
         if df.shape[1] > 19:
+            df_clean["Jam Finish C"]      = df.iloc[:, 16] if df.shape[1] > 16 else np.nan
             df_clean["Finish Moist C"]    = df.iloc[:, 17]
             df_clean["Finish Particle C"] = df.iloc[:, 18]
             df_clean["Tonnage C"]         = df.iloc[:, 19]
+            df_clean["Checker C"]         = df.iloc[:, 20] if df.shape[1] > 20 else np.nan
+            df_clean["Remarks"]           = df.iloc[:, 21] if df.shape[1] > 21 else np.nan
         else:
+            df_clean["Jam Finish C"]      = np.nan
             df_clean["Finish Moist C"]    = np.nan
             df_clean["Finish Particle C"] = np.nan
             df_clean["Tonnage C"]         = np.nan
+            df_clean["Checker C"]         = np.nan
+            df_clean["Remarks"]           = np.nan
 
     except IndexError:
         st.warning("⚠️ Data belum terinput lengkap (Kolom Excel belum sesuai). Pastikan Sheet memiliki kolom produk C.")
@@ -371,13 +381,19 @@ try:
         st.subheader("📈 Grafik Tren Harian")
         chart_data = df_clean.dropna(subset=["Jam"]).copy()
 
+        # Membuat sumbu X gabungan untuk Finish Product (Memprioritaskan jam yang terisi di A, lalu B, lalu C)
+        chart_data['Jam Output'] = chart_data['Jam Finish A'].replace(r'^\s*$', np.nan, regex=True)\
+                                   .fillna(chart_data['Jam Finish B'].replace(r'^\s*$', np.nan, regex=True))\
+                                   .fillna(chart_data['Jam Finish C'].replace(r'^\s*$', np.nan, regex=True))\
+                                   .fillna(chart_data['Jam'])
+
         st.caption("1. Tren RM Rotary Moist (Input)")
         st.line_chart(chart_data, x="Jam", y=["RM Rotary Moist A", "RM Rotary Moist B"], color=["#3498db", "#e74c3c"])
         st.caption("2. Tren Rotary Moist (Process)")
         st.line_chart(chart_data, x="Jam", y=["Rotary Moist A", "Rotary Moist B"], color=["#9b59b6", "#34495e"])
         st.caption("3. Tren Finish Product Moist (Output)")
-        # Tambahan Line C warna biru muda
-        st.line_chart(chart_data, x="Jam", y=["Finish Moist A", "Finish Moist B", "Finish Moist C"], color=["#2ecc71", "#f1c40f", "#3498db"])
+        # Tambahan Line C warna biru muda dan menggunakan Jam Output
+        st.line_chart(chart_data, x="Jam Output", y=["Finish Moist A", "Finish Moist B", "Finish Moist C"], color=["#2ecc71", "#f1c40f", "#3498db"])
         
         st.divider()
         
@@ -416,7 +432,6 @@ try:
                     try:
                         val = float(row[col])
                         idx = df_clean.columns.get_loc(col)
-                        # Kondisi baru ditambahkan di sini (val < 5.0)
                         if val > 15.0 or val < 5.0: styles[idx] = 'background-color: #ff4b4b; color: white; font-weight: bold;' # Merah
                         else: styles[idx] = 'background-color: #2ecc71; color: black; font-weight: bold;' # Hijau
                     except: pass
@@ -440,7 +455,7 @@ try:
 
             return styles
 
-        # Tampilkan tabel dengan Warna QC
+        # Tampilkan tabel dengan Warna QC (Sekarang akan otomatis menyertakan kolom Paraph Checker dan Remarks)
         st.dataframe(df_clean.style.apply(qc_highlight, axis=1), use_container_width=True)
 
     else:
