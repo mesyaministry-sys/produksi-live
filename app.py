@@ -272,24 +272,24 @@ try:
             df_clean["Checker C"]         = np.nan
 
         # ==========================================
-        # PERUBAHAN UTAMA: TARIK DATA KHUSUS KOLOM Q (Baris 9 s/d 21)
+        # PERUBAHAN UTAMA: TARIK DATA KHUSUS KOLOM V (Baris 9 s/d 21)
         # ==========================================
-        # Kolom Q = Indeks ke-16 di pandas
-        if df_raw.shape[1] > 16:
-            # Tarik Kolom Q, pastikan index-nya tetap sejajar dengan df_clean
-            remarks_q = df.iloc[:, 16].copy()
+        # Kolom V = Indeks ke-21 di pandas (A=0, B=1 ... V=21)
+        if df.shape[1] > 21:
+            # Tarik Kolom V, pastikan index-nya tetap sejajar dengan df_clean
+            remarks_v = df.iloc[:, 21].copy()
             
             # Ubah jadi string dan bersihkan sisa-sisa NaN
-            remarks_q = remarks_q.fillna("").astype(str).str.strip()
+            remarks_v = remarks_v.fillna("").astype(str).str.strip()
             
             # Ubah kata 'nan' atau 'None' (bawaan export pandas) menjadi string kosong ""
-            remarks_q = remarks_q.replace(['nan', 'None', 'NaN'], "")
+            remarks_v = remarks_v.replace(['nan', 'None', 'NaN'], "")
             
             # Filter baris: Hanya pertahankan data jika index aslinya 8 s/d 20 (Baris Excel 9 s/d 21)
             # Sel di luar rentang tersebut akan dibuat kosong ""
-            remarks_q = remarks_q.where((df.index >= 8) & (df.index <= 20), "")
+            remarks_v = remarks_v.where((df.index >= 8) & (df.index <= 20), "")
             
-            df_clean["Remarks"] = remarks_q
+            df_clean["Remarks"] = remarks_v
         else:
             df_clean["Remarks"] = ""
 
