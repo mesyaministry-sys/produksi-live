@@ -257,14 +257,29 @@ try:
         df_clean["Tonnage B"]         = df.iloc[:, 14]
         df_clean["Checker B"]         = df.iloc[:, 15] if df.shape[1] > 15 else np.nan
 
-        # Tambahan Kolom C & Remarks
+        # ==========================================
+        # PERUBAHAN UTAMA: Tambahan Kolom C & Remarks
+        # ==========================================
         if df.shape[1] > 19:
             df_clean["Jam Finish C"]      = df.iloc[:, 16] if df.shape[1] > 16 else np.nan
             df_clean["Finish Moist C"]    = df.iloc[:, 17]
             df_clean["Finish Particle C"] = df.iloc[:, 18]
             df_clean["Tonnage C"]         = df.iloc[:, 19]
             df_clean["Checker C"]         = df.iloc[:, 20] if df.shape[1] > 20 else np.nan
-            df_clean["Remarks"]           = df.iloc[:, 21] if df.shape[1] > 21 else np.nan
+            
+            # Membaca seluruh kolom Remarks (indeks 21 hingga akhir dataframe)
+            if df.shape[1] > 21:
+                # Ambil semua kolom sisa, isi NaN dengan blank string, jadikan tipe string
+                remarks_data = df.iloc[:, 21:].fillna("").astype(str)
+                # Gabungkan isinya per baris, abaikan yang kosong atau berbunyi 'nan'/'none'
+                df_clean["Remarks"] = remarks_data.apply(
+                    lambda row: " | ".join([val.strip() for val in row if val.strip() and val.strip().lower() not in ['nan', 'none']]), 
+                    axis=1
+                )
+                # Bersihkan row yang akhirnya cuma string kosong menjadi None
+                df_clean["Remarks"] = df_clean["Remarks"].replace("", None)
+            else:
+                df_clean["Remarks"] = np.nan
         else:
             df_clean["Jam Finish C"]      = np.nan
             df_clean["Finish Moist C"]    = np.nan
@@ -546,4 +561,4 @@ try:
         st.warning("⚠️ Data belum terinput.")
 
 except Exception as e:
-    st.warning(f"⚠️ Data belum terinput atau format belum sesuai.")
+    st.warning(f"⚠️ Data belum terinput atau format belum sesuai. Detail Error: {e}")
