@@ -274,24 +274,24 @@ try:
         # ==========================================
         # PERUBAHAN UTAMA: TARIK DATA KHUSUS KOLOM Q (Baris 9 s/d 21)
         # ==========================================
-        # Kolom Q = Indeks ke-16
+        # Kolom Q = Indeks ke-16 di pandas
         if df_raw.shape[1] > 16:
-            # Mengambil spesifik indeks baris 8 hingga 20 (Excel baris 9 s/d 21)
-            remarks_q = df_raw.iloc[8:21, 16].astype(str)
-            # Bersihkan nilai nan, kosong, atau "None"
-            remarks_q = remarks_q.replace(r'^\s*$', np.nan, regex=True).replace(['nan', 'None'], np.nan)
+            # Tarik Kolom Q, pastikan index-nya tetap sejajar dengan df_clean
+            remarks_q = df.iloc[:, 16].copy()
             
-            remarks_list = remarks_q.tolist()
+            # Ubah jadi string dan bersihkan sisa-sisa NaN
+            remarks_q = remarks_q.fillna("").astype(str).str.strip()
             
-            # Sesuaikan panjang remarks dengan jumlah baris di tabel QC
-            if len(remarks_list) < len(df_clean):
-                remarks_list.extend([np.nan] * (len(df_clean) - len(remarks_list)))
-            else:
-                remarks_list = remarks_list[:len(df_clean)]
-                
-            df_clean["Remarks"] = remarks_list
+            # Ubah kata 'nan' atau 'None' (bawaan export pandas) menjadi string kosong ""
+            remarks_q = remarks_q.replace(['nan', 'None', 'NaN'], "")
+            
+            # Filter baris: Hanya pertahankan data jika index aslinya 8 s/d 20 (Baris Excel 9 s/d 21)
+            # Sel di luar rentang tersebut akan dibuat kosong ""
+            remarks_q = remarks_q.where((df.index >= 8) & (df.index <= 20), "")
+            
+            df_clean["Remarks"] = remarks_q
         else:
-            df_clean["Remarks"] = np.nan
+            df_clean["Remarks"] = ""
 
     except IndexError:
         st.warning("⚠️ Data belum terinput lengkap (Kolom Excel belum sesuai). Pastikan Sheet memiliki kolom produk C.")
