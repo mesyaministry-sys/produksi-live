@@ -8,7 +8,11 @@ import plotly.graph_objects as go # <-- Library untuk grafik elegan dan presisi
 # ==========================================
 # ⚙️ KONFIGURASI HALAMAN
 # ==========================================
-st.set_page_config(page_title="Monitoring Produksi", layout="wide", page_icon="🏭")
+# PERUBAHAN: Memanggil file gambar logo_inproses.png sebagai icon aplikasi
+try:
+    st.set_page_config(page_title="Monitoring Produksi", layout="wide", page_icon="logo_inproses.png")
+except:
+    st.set_page_config(page_title="Monitoring Produksi", layout="wide", page_icon="🏭") # Fallback jika gambar belum ada
 
 # ==========================================
 # 🚫 SEMBUNYIKAN ELEMEN STREAMLIT (MENU, GITHUB, FOOTER)
