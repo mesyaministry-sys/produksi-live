@@ -553,14 +553,10 @@ try:
                         val = float(row[col])
                         idx = df_clean.columns.get_loc(col)
                         
-                        if val < 75.0: 
+                        if val < 75.0 or val > 85.0: 
                             styles[idx] = 'background-color: #ff4b4b; color: white; font-weight: bold;' # Merah
-                        elif 75.0 <= val <= 79.9:
-                            styles[idx] = 'background-color: #87CEFA; color: black; font-weight: bold;' # Biru Muda
-                        elif 80.0 <= val <= 88.0:
+                        elif 75.0 <= val <= 85.0:
                             styles[idx] = 'background-color: #2ecc71; color: black; font-weight: bold;' # Hijau
-                        else: # > 88.0
-                            styles[idx] = 'background-color: #f1c40f; color: black; font-weight: bold;' # Kuning
                     except: pass
 
             return styles
