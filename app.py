@@ -70,6 +70,7 @@ DAFTAR_FILE = {
     "Mei 2026": "1nsdZr1QKJX4c_rzYmIHwOc5KAY6oqtB56GFstWWY0Q4",
     "Juni 2026": "197Ew7VQSeey5fdNvVd34vYhlFMjxQa7HMlwDOzjnhMY",
     "Juli 2026": "1PHBfsP7SD8R6z48Y4rf0OdmsT3NZDNZcRrxueodkHBw",
+    "Agustus 2026": "1YS1Ju5_WWES4ffG4ETT1JUyqDftVaVOMhh-Pi4WtKBc",
 }
 
 # ==========================================
