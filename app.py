@@ -317,6 +317,13 @@ try:
         df_clean[c] = df_clean[c].astype(str).str.replace(',', '.', regex=False)
         df_clean[c] = pd.to_numeric(df_clean[c], errors='coerce')
 
+    # ==========================================
+    # PERBAIKAN: CEK DATA AKTUAL (Mencegah render jika hanya template kosong)
+    # ==========================================
+    if df_clean[cols_angka].isna().all().all():
+        st.warning(f"⚠️ Data belum terinput untuk Tanggal {pilihan_sheet} (Tidak ada kegiatan produksi).")
+        st.stop()
+
     # Hitung Tonnage
     def hitung_tonnage(series):
         total = 0
