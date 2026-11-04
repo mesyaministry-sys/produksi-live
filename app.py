@@ -98,8 +98,18 @@ st.divider()
 # ==========================================
 # 1. MENU SAMPING (SIDEBAR)
 # ==========================================
-# Opsi variasi 28A, dll dihapus agar akurat 1-31
-daftar_tanggal = [str(i) for i in range(1, 32)]
+# PERUBAHAN: Fungsi ini membaca langsung daftar sheet/tab yang ada di Spreadsheet
+@st.cache_data(ttl=120)
+def get_real_sheet_names(sheet_id):
+    if not sheet_id or "MASUKKAN_ID" in sheet_id:
+        return [str(i) for i in range(1, 32)]
+    try:
+        url_excel = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=xlsx"
+        xl = pd.ExcelFile(url_excel)
+        return [str(sheet) for sheet in xl.sheet_names]
+    except Exception:
+        # Fallback jika gagal terkoneksi sesaat
+        return [str(i) for i in range(1, 32)]
 
 with st.sidebar:
     st.header("🗂️ Menu Utama")
@@ -108,7 +118,15 @@ with st.sidebar:
     
     st.divider()
     st.subheader("📅 Periode Harian")
-    pilihan_sheet = st.selectbox("Pilih Tanggal (Sheet):", daftar_tanggal, index=9) 
+    
+    # PERUBAHAN: Mengambil daftar tanggal sesuai ketersediaan tab asli
+    daftar_tanggal_asli = get_real_sheet_names(SHEET_ID_AKTIF)
+    
+    # Memastikan index tidak error jika jumlah sheet kurang dari 9. 
+    # Otomatis memilih sheet terakhir (tanggal terbaru yang ada)
+    safe_index = len(daftar_tanggal_asli) - 1 if len(daftar_tanggal_asli) > 0 else 0
+    
+    pilihan_sheet = st.selectbox("Pilih Tanggal (Sheet):", daftar_tanggal_asli, index=safe_index) 
     
     # FITUR AUTO REFRESH
     auto_refresh = st.checkbox("🔄 Auto Refresh (60s)", value=False)
