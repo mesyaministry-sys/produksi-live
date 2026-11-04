@@ -98,7 +98,6 @@ st.divider()
 # ==========================================
 # 1. MENU SAMPING (SIDEBAR)
 # ==========================================
-# PERUBAHAN: Fungsi ini membaca langsung daftar sheet/tab yang ada di Spreadsheet
 @st.cache_data(ttl=120)
 def get_real_sheet_names(sheet_id):
     if not sheet_id or "MASUKKAN_ID" in sheet_id:
@@ -119,11 +118,9 @@ with st.sidebar:
     st.divider()
     st.subheader("📅 Periode Harian")
     
-    # PERUBAHAN: Mengambil daftar tanggal sesuai ketersediaan tab asli
     daftar_tanggal_asli = get_real_sheet_names(SHEET_ID_AKTIF)
     
-    # Memastikan index tidak error jika jumlah sheet kurang dari 9. 
-    # Otomatis memilih sheet terakhir (tanggal terbaru yang ada)
+    # Memastikan index tidak error jika jumlah sheet sedikit
     safe_index = len(daftar_tanggal_asli) - 1 if len(daftar_tanggal_asli) > 0 else 0
     
     pilihan_sheet = st.selectbox("Pilih Tanggal (Sheet):", daftar_tanggal_asli, index=safe_index) 
@@ -300,24 +297,12 @@ try:
             df_clean["Tonnage C"]         = np.nan
             df_clean["Checker C"]         = np.nan
 
-        # ==========================================
-        # PERUBAHAN UTAMA: TARIK DATA KHUSUS KOLOM V (Baris 9 s/d 21)
-        # ==========================================
         # Kolom V = Indeks ke-21 di pandas (A=0, B=1 ... V=21)
         if df.shape[1] > 21:
-            # Tarik Kolom V, pastikan index-nya tetap sejajar dengan df_clean
             remarks_v = df.iloc[:, 21].copy()
-            
-            # Ubah jadi string dan bersihkan sisa-sisa NaN
             remarks_v = remarks_v.fillna("").astype(str).str.strip()
-            
-            # Ubah kata 'nan' atau 'None' (bawaan export pandas) menjadi string kosong ""
             remarks_v = remarks_v.replace(['nan', 'None', 'NaN'], "")
-            
-            # Filter baris: Hanya pertahankan data jika index aslinya 8 s/d 20 (Baris Excel 9 s/d 21)
-            # Sel di luar rentang tersebut akan dibuat kosong ""
             remarks_v = remarks_v.where((df.index >= 8) & (df.index <= 20), "")
-            
             df_clean["Remarks"] = remarks_v
         else:
             df_clean["Remarks"] = ""
@@ -335,9 +320,7 @@ try:
         df_clean[c] = df_clean[c].astype(str).str.replace(',', '.', regex=False)
         df_clean[c] = pd.to_numeric(df_clean[c], errors='coerce')
 
-    # ==========================================
-    # PERBAIKAN: CEK DATA AKTUAL (Mencegah render jika hanya template kosong)
-    # ==========================================
+    # Cek Data Aktual (Mencegah render jika hanya template kosong)
     if df_clean[cols_angka].isna().all().all():
         st.warning(f"⚠️ Data belum terinput untuk Tanggal {pilihan_sheet} (Tidak ada kegiatan produksi).")
         st.stop()
@@ -362,6 +345,22 @@ try:
     total_ton_b = hitung_tonnage(df_clean["Tonnage B"]) 
     total_ton_c = hitung_tonnage(df_clean["Tonnage C"]) 
     total_gabungan = total_ton_a + total_ton_b + total_ton_c
+
+    # ==========================================
+    # PERBAIKAN: HAPUS DATA SUMMARY BAWAH DARI PERHITUNGAN RATA-RATA
+    # ==========================================
+    pairs = [
+        ("RM Rotary Moist A", "Jam"), ("Rotary Moist A", "Jam"),
+        ("RM Rotary Moist B", "Jam Rotary B"), ("Rotary Moist B", "Jam Rotary B"),
+        ("Finish Moist A", "Jam Finish A"), ("Finish Particle A", "Jam Finish A"),
+        ("Finish Moist B", "Jam Finish B"), ("Finish Particle B", "Jam Finish B"),
+        ("Finish Moist C", "Jam Finish C"), ("Finish Particle C", "Jam Finish C"),
+    ]
+    for val_col, time_col in pairs:
+        if val_col in df_clean.columns and time_col in df_clean.columns:
+            # Mengosongkan angka yang tidak memiliki jam valid sejajar di sebelahnya
+            mask_invalid_time = ~df_clean[time_col].astype(str).str.contains(r'\d', na=False)
+            df_clean.loc[mask_invalid_time, val_col] = np.nan
 
     # ==========================================
     # E. TAMPILAN DASHBOARD
